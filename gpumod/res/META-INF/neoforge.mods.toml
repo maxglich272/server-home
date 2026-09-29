@@ -1,0 +1,13 @@
+modLoader="javafml"
+loaderVersion="[1,)"
+license="MIT"
+showAsResourcePack=false
+
+[[mods]]
+modId="gpudedicada"
+version="1.0.0"
+displayName="GPU Dedicada"
+authors="Servidor Home"
+description='''En laptops con dos tarjetas gráficas, hace que Minecraft use la dedicada (NVIDIA, AMD o Intel Arc). Lo deja configurado en Windows y se nota desde el próximo inicio del juego.'''
+displayTest="IGNORE_SERVER_VERSION"
+clientSideOnly=true

@@ -1,0 +1,4 @@
+Si un modpack de Fabric no enciende porque Fabric Loader es demasiado nuevo para un mod antiguo (como Not Enough Crashes en un modpack de 1.18.2), ahora se arregla solo: la app usa la versión de Fabric Loader con la que tu launcher abre ese modpack, o la más nueva que sirve para todos los mods.
+Al importar un modpack de Fabric de Minecraft 1.20.1 o anterior, la app elige desde el principio la versión de Fabric Loader con la que se hizo ese modpack (la 0.14).
+Si ninguna versión de Fabric Loader sirve para todos los mods, explica cuál choca con cuál y ofrece desactivar el mod antiguo con un botón.
+Detecta mejor qué mod botó el servidor cuando el error viene de un cambio que ese mod le hace al juego.

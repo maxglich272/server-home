@@ -1,0 +1,6 @@
+Si un servidor con mods no enciende, ahora se arregla solo aunque NeoForge o Forge terminen «sin error» (antes se veía como si se apagara solo).
+Vuelve a activar los mods que la importación desactivó por error (como JEI, SmartBrainLib o FTB Essentials) y los que otro mod necesita.
+Si un mod necesita otro que es solo para el jugador (como Colorwheel con Iris), lo desactiva en el servidor.
+Arregla más errores solo: mods que chocan, archivos de mods dañados, poca memoria para Java, opciones de Java desconocidas e instalaciones a medias.
+Nuevo: cambia la imagen del servidor y ponle colores al mensaje (Ajustes → Imagen y mensaje del servidor).
+Nuevo: botón «Compartir mods con amigos», que arma un .zip con los mods que necesitan tus amigos y un LEEME con los pasos.

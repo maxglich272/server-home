@@ -1,0 +1,34 @@
+GPU Dedicada 1.0.0: mod para que Minecraft use la tarjeta gráfica dedicada
+==========================================================================
+
+Para quién es
+-------------
+Para laptops (y algunos PC) que tienen DOS tarjetas gráficas: la integrada (Intel UHD/Iris, AMD Radeon
+Graphics) y la dedicada (NVIDIA GeForce/RTX, AMD Radeon RX, Intel Arc A). Windows suele abrir Minecraft con la
+integrada, que es mucho más lenta. Si tu PC tiene una sola tarjeta, el mod no cambia nada (Minecraft ya la usa).
+
+Cómo se usa
+-----------
+1. Copia gpu-dedicada-1.0.0.jar en la carpeta «mods» de tu Minecraft (la de tu instancia o modpack).
+   Sirve con Fabric, Quilt, NeoForge y Forge desde Minecraft 1.14 (no con Forge 1.12 o más antiguo).
+2. Abre Minecraft una vez. Si el mod detecta las dos tarjetas, deja configurado Windows y te avisa con un mensaje.
+3. Cierra Minecraft y vuelve a abrirlo: desde ahora usa la tarjeta dedicada.
+
+Para comprobarlo, presiona F3 dentro del juego: a la derecha, en «Display», tiene que aparecer tu tarjeta
+dedicada (por ejemplo NVIDIA GeForce...).
+
+Qué hace exactamente
+--------------------
+Minecraft no puede cambiar de tarjeta una vez abierto. El mod hace lo mismo que harías a mano en
+«Configuración → Sistema → Pantalla → Gráficos»: pone en «Alto rendimiento» el Java con el que corre tu
+Minecraft. No toca el juego, tus mundos ni otros programas. Si ya elegiste «Ahorro de energía» para ese
+Java, lo respeta.
+
+Para deshacerlo: «Configuración → Sistema → Pantalla → Gráficos», busca javaw.exe y quítalo (o elige otra opción).
+
+Bueno saber
+-----------
+- Es solo para el juego. En un servidor no hace nada (Servidor Home lo desactiva solo en los servidores).
+- Cambiar a la tarjeta dedicada es lo que más se nota en un laptop. Para tener aún más FPS, agrega a tu juego
+  Sodium (Fabric) o Embeddium (Forge/NeoForge).
+- Con el laptop enchufado rinde mucho más que con batería.
