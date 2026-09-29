@@ -76,7 +76,11 @@ def documents_dir():
 
 if INSTALLED:
     DATA_DIR = os.path.join(documents_dir(), "servidor home")
-    APPDATA_DIR = os.path.join(os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"), APP_NAME)
+    if IS_WINDOWS or os.environ.get("LOCALAPPDATA"):
+        APPDATA_DIR = os.path.join(os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"), APP_NAME)
+    else:   # Linux (instalar.sh): el programa va en ~/.local/share/servidor-home/app y lo demás a su lado
+        APPDATA_DIR = os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"),
+                                   "servidor-home")
 else:
     DATA_DIR = APPDATA_DIR = BASE_DIR
 SERVERS_DIR = os.path.join(DATA_DIR, "servidores")
@@ -112,44 +116,84 @@ def child_kwargs(detach=False):
 _JOB = None
 
 
-def attach_to_job(proc):
+def _win_job(memory_mb=None):
+    """Windows: crea un 'Job' que cierra sus procesos si la app se cierra de golpe; con memory_mb, además no les
+    deja usar más de esa memoria entre todos. Devuelve el handle o None."""
+    import ctypes
+    from ctypes import wintypes
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.CreateJobObjectW.restype = wintypes.HANDLE
+    k32.SetInformationJobObject.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD]
+    k32.CloseHandle.argtypes = [wintypes.HANDLE]
+
+    class Basic(ctypes.Structure):
+        _fields_ = [("PerProcessUserTimeLimit", ctypes.c_int64), ("PerJobUserTimeLimit", ctypes.c_int64),
+                    ("LimitFlags", wintypes.DWORD), ("MinimumWorkingSetSize", ctypes.c_size_t),
+                    ("MaximumWorkingSetSize", ctypes.c_size_t), ("ActiveProcessLimit", wintypes.DWORD),
+                    ("Affinity", ctypes.c_size_t), ("PriorityClass", wintypes.DWORD),
+                    ("SchedulingClass", wintypes.DWORD)]
+
+    class IoCounters(ctypes.Structure):
+        _fields_ = [(n, ctypes.c_uint64) for n in ("ReadOperationCount", "WriteOperationCount",
+                    "OtherOperationCount", "ReadTransferCount", "WriteTransferCount", "OtherTransferCount")]
+
+    class Extended(ctypes.Structure):
+        _fields_ = [("BasicLimitInformation", Basic), ("IoInfo", IoCounters),
+                    ("ProcessMemoryLimit", ctypes.c_size_t), ("JobMemoryLimit", ctypes.c_size_t),
+                    ("PeakProcessMemoryUsed", ctypes.c_size_t), ("PeakJobMemoryUsed", ctypes.c_size_t)]
+    job = k32.CreateJobObjectW(None, None)
+    if not job:
+        return None
+    info = Extended()
+    info.BasicLimitInformation.LimitFlags = 0x2000          # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+    if memory_mb:
+        info.BasicLimitInformation.LimitFlags |= 0x200      # JOB_OBJECT_LIMIT_JOB_MEMORY
+        info.JobMemoryLimit = int(memory_mb) * 1048576
+    if not k32.SetInformationJobObject(job, 9, ctypes.byref(info), ctypes.sizeof(info)):
+        k32.CloseHandle(job)
+        return None
+    return job
+
+
+def attach_to_job(proc, memory_mb=None):
     """Windows: mete el proceso en un 'Job' para que Windows lo cierre si la app se cierra de golpe
-    (así no quedan servidores huérfanos ocupando el puerto)."""
+    (así no quedan servidores huérfanos ocupando el puerto). Con memory_mb el proceso va en un Job propio con ese
+    tope de memoria, para que un servidor desbocado no congele el PC; ese Job se cierra con close_job()."""
     global _JOB
     if not IS_WINDOWS:
-        return
+        return None
     try:
         import ctypes
         from ctypes import wintypes
         k32 = ctypes.WinDLL("kernel32", use_last_error=True)
-        k32.CreateJobObjectW.restype = wintypes.HANDLE
-        k32.SetInformationJobObject.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD]
         k32.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
+        if memory_mb:
+            job = _win_job(memory_mb)
+            if job and k32.AssignProcessToJobObject(job, int(proc._handle)):
+                return job
+            if job:
+                close_job(job)
         if _JOB is None:
-            class Basic(ctypes.Structure):
-                _fields_ = [("PerProcessUserTimeLimit", ctypes.c_int64), ("PerJobUserTimeLimit", ctypes.c_int64),
-                            ("LimitFlags", wintypes.DWORD), ("MinimumWorkingSetSize", ctypes.c_size_t),
-                            ("MaximumWorkingSetSize", ctypes.c_size_t), ("ActiveProcessLimit", wintypes.DWORD),
-                            ("Affinity", ctypes.c_size_t), ("PriorityClass", wintypes.DWORD),
-                            ("SchedulingClass", wintypes.DWORD)]
-
-            class IoCounters(ctypes.Structure):
-                _fields_ = [(n, ctypes.c_uint64) for n in ("ReadOperationCount", "WriteOperationCount",
-                            "OtherOperationCount", "ReadTransferCount", "WriteTransferCount", "OtherTransferCount")]
-
-            class Extended(ctypes.Structure):
-                _fields_ = [("BasicLimitInformation", Basic), ("IoInfo", IoCounters),
-                            ("ProcessMemoryLimit", ctypes.c_size_t), ("JobMemoryLimit", ctypes.c_size_t),
-                            ("PeakProcessMemoryUsed", ctypes.c_size_t), ("PeakJobMemoryUsed", ctypes.c_size_t)]
-            job = k32.CreateJobObjectW(None, None)
-            info = Extended()
-            info.BasicLimitInformation.LimitFlags = 0x2000          # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
-            if not job or not k32.SetInformationJobObject(job, 9, ctypes.byref(info), ctypes.sizeof(info)):
-                return
-            _JOB = job
+            _JOB = _win_job()
+            if not _JOB:
+                return None
         k32.AssignProcessToJobObject(_JOB, int(proc._handle))
     except Exception:
         pass
+    return None
+
+
+def close_job(job):
+    """Suelta el Job propio de un proceso que ya terminó."""
+    if IS_WINDOWS and job:
+        try:
+            import ctypes
+            from ctypes import wintypes
+            k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            k32.CloseHandle.argtypes = [wintypes.HANDLE]
+            k32.CloseHandle(job)
+        except Exception:
+            pass
 
 
 def windows_process_image(pid):
@@ -390,24 +434,62 @@ def win_no_power_throttling(proc):
 
 
 class KeepAwake:
-    """Windows: mientras haya un servidor encendido, el PC no se suspende solo (la pantalla sí puede apagarse).
-    Si el PC se duerme, el servidor se congela y tus amigos se desconectan."""
+    """Mientras haya un servidor encendido, el PC no se suspende solo (la pantalla sí puede apagarse).
+    Si el PC se duerme, el servidor se congela y tus amigos se desconectan.
+    Windows: SetThreadExecutionState. Linux: un bloqueo de systemd-inhibit que dura mientras haya servidores."""
 
     def __init__(self):
         self.on = False
+        self.inhibit = None
         threading.Thread(target=self._run, daemon=True).start()
 
+    @staticmethod
+    def available():
+        return IS_WINDOWS or (sys.platform.startswith("linux") and bool(shutil.which("systemd-inhibit"))
+                              and bool(shutil.which("tail")))
+
     def _run(self):
-        import ctypes
-        set_state = ctypes.windll.kernel32.SetThreadExecutionState
-        set_state.argtypes = [ctypes.c_uint32]
+        set_state = None
+        if IS_WINDOWS:
+            import ctypes
+            set_state = ctypes.windll.kernel32.SetThreadExecutionState
+            set_state.argtypes = [ctypes.c_uint32]
+        fails = 0
         while True:
             want = bool(running_servers())
-            if want != self.on:
-                # ES_CONTINUOUS | ES_SYSTEM_REQUIRED mientras haya servidores; solo ES_CONTINUOUS para soltarlo
-                set_state(0x80000000 | (0x00000001 if want else 0))
-                self.on = want
+            if set_state:
+                if want != self.on:
+                    # ES_CONTINUOUS | ES_SYSTEM_REQUIRED mientras haya servidores; solo ES_CONTINUOUS para soltarlo
+                    set_state(0x80000000 | (0x00000001 if want else 0))
+                    self.on = want
+            else:
+                fails = self._linux(want, fails)
             time.sleep(15)
+
+    def _linux(self, want, fails):
+        p = self.inhibit
+        if p and p.poll() is not None:          # se cerró solo (sin sesión de systemd, por ejemplo)
+            self.inhibit = p = None
+            fails += 1
+        if want and not p and fails < 3:
+            try:
+                # «tail --pid» termina cuando la app termina: el bloqueo nunca queda huérfano aunque la app se caiga
+                self.inhibit = subprocess.Popen(
+                    ["systemd-inhibit", "--what=sleep", f"--who={APP_NAME}", "--mode=block",
+                     "--why=Hay un servidor encendido; si el PC se suspende, tus amigos se desconectan.",
+                     "tail", f"--pid={os.getpid()}", "-f", "/dev/null"],
+                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except OSError:
+                fails = 3
+        elif not want and p:
+            p.terminate()
+            try:
+                p.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                p.kill()
+            self.inhibit = None
+            fails = 0
+        return fails
 
 
 APP_USER_MODEL_ID = "ServidorHome.App"
@@ -524,6 +606,46 @@ def total_ram_mb():
     except Exception:
         pass
     return 0
+
+
+def memory_cap_mb(ram_mb):
+    """Tope de memoria de un servidor: su -Xmx más lo que Java usa fuera de él (mods, hilos, compilador),
+    sin pasar de la RAM del PC menos 1 GB para el sistema, pero nunca menos que su RAM y la mitad (mínimo 1,5 GB
+    más). No es para apretar al servidor: es para que uno desbocado se cierre solo en vez de congelar el PC."""
+    ram_mb = int(ram_mb)
+    cap = ram_mb * 2 + 2048
+    total = total_ram_mb()
+    if total:
+        cap = min(cap, total - 1024)
+    return max(cap, ram_mb + max(1536, ram_mb // 2))
+
+
+_SCOPE_OK = None
+
+
+def systemd_scope_ok():
+    """Linux: ¿se pueden lanzar procesos en su propio grupo de systemd (con tope de memoria), sin ser root?"""
+    global _SCOPE_OK
+    if _SCOPE_OK is None:
+        _SCOPE_OK = False
+        if (sys.platform.startswith("linux") and shutil.which("systemd-run")
+                and os.environ.get("SERVIDOR_HOME_SIN_TOPES") != "1"):
+            try:
+                _SCOPE_OK = subprocess.run(["systemd-run", "--user", "--scope", "--quiet", "--collect", "--", "true"],
+                                           capture_output=True, timeout=20).returncode == 0
+            except Exception:
+                pass
+    return _SCOPE_OK
+
+
+def limit_command(cmd, memory_mb, name="servidor"):
+    """Linux: envuelve el comando para que corra en su propio grupo de systemd con ese tope de memoria. systemd-run
+    --scope ejecuta el comando en el mismo proceso, así que el PID, la consola y el cierre siguen igual.
+    Sin systemd (o en Windows, que usa attach_to_job) devuelve el comando tal cual."""
+    if not memory_mb or not systemd_scope_ok():
+        return cmd
+    return ["systemd-run", "--user", "--scope", "--quiet", "--collect",
+            f"--description={APP_NAME}: {name}", "-p", f"MemoryMax={int(memory_mb)}M", "--"] + list(cmd)
 
 
 def slugify(name):
@@ -3346,10 +3468,13 @@ class ServerInstance:
                     self.repair["log"].append(what)
             cmd = self.build_command()
             self.log("$ " + " ".join(cmd), "app")
-            self.proc = subprocess.Popen(cmd, cwd=self.dir, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            cap = memory_cap_mb(self.meta.get("ram_mb", 2048))
+            self.proc = subprocess.Popen(limit_command(cmd, cap, self.meta.get("name") or self.id),
+                                         cwd=self.dir, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                          stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace",
                                          bufsize=1, **child_kwargs(detach=True))
-            attach_to_job(self.proc)
+            self.proc.mem_cap = cap
+            self.proc.job = attach_to_job(self.proc, cap)
             win_no_power_throttling(self.proc)
             try:
                 with open(self.pid_file, "w") as f:
@@ -3417,6 +3542,7 @@ class ServerInstance:
                 self.players.discard(m.group(1))
                 self._seen(m.group(1))
         code = proc.wait()
+        close_job(getattr(proc, "job", None))
         try:
             os.remove(self.pid_file)
         except OSError:
@@ -3437,6 +3563,9 @@ class ServerInstance:
                     self.status = "detenido"
                     self.log(f"Servidor apagado (código {code}).")
                 else:
+                    if code == -9 and not IS_WINDOWS and systemd_scope_ok():
+                        self.log(f"El sistema cerró el servidor: probablemente pasó su tope de memoria "
+                                 f"({getattr(proc, 'mem_cap', '?')} MB) o el PC se quedó sin RAM.", "err")
                     self._handle_crash(recent[-1000:], was_online, code, t0)
         if self.restart_pending:
             self.restart_pending = False
@@ -7526,6 +7655,7 @@ def main():
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_USER_MODEL_ID)
         except Exception:
             pass
+    if KeepAwake.available():
         KeepAwake()
     print(f"\n  {APP_NAME} v{APP_VERSION}")
     print(f"  Panel:            {APP_URL}")

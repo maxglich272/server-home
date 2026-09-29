@@ -7,7 +7,11 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DIR" || exit 1
 chmod +x "$DIR/iniciar.sh" "$DIR/servidor_home.py" 2>/dev/null   # por si se copió sin permiso de ejecución
 
-if ! command -v python3 >/dev/null 2>&1; then
+# El paquete de Linux (instalar.sh) trae su propio Python; si no está, se usa el del sistema.
+PY=python3
+[ -x "$DIR/python/bin/python3" ] && PY="$DIR/python/bin/python3"
+
+if [ "$PY" = python3 ] && ! command -v python3 >/dev/null 2>&1; then
   msg="Servidor Home necesita Python 3. Instálalo con: sudo apt install python3  (o: sudo dnf install python3)"
   command -v notify-send >/dev/null 2>&1 && notify-send "Servidor Home" "$msg"
   echo "$msg"
@@ -40,7 +44,7 @@ if [ "$1" = "--escritorio" ]; then
   if [ -f "$LOG" ] && [ "$(stat -c%s "$LOG" 2>/dev/null || echo 0)" -gt 5000000 ]; then
     mv -f "$LOG" "$LOG.1"
   fi
-  exec python3 servidor_home.py "$@" >> "$LOG" 2>&1
+  exec "$PY" servidor_home.py "$@" >> "$LOG" 2>&1
 fi
 
-exec python3 servidor_home.py "$@"
+exec "$PY" servidor_home.py "$@"

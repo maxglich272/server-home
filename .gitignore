@@ -42,3 +42,7 @@ pruebas/realtest/
 logs/
 crash-reports/
 world/
+
+# --- Paquete de Linux (build/construir_linux.sh) ---
+build/linux-tmp/
+build/cache/
