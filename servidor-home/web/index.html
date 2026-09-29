@@ -486,7 +486,7 @@ details summary{cursor:pointer;color:var(--muted);margin:6px 0}
     <section data-p="remote" class="hide">
       <div class="card">
         <h3>Deja que alguien de otra ciudad administre este servidor</h3>
-        <p class="muted small" style="margin-top:-4px">Esa persona necesita Servidor Home en su PC. Crea un código para ella y pásaselo por WhatsApp o Discord: lo pega en su app, en <b>Servidores de amigos</b>, y desde ahí puede encender, apagar y reiniciar, usar la consola, manejar jugadores (admins, baneos, lista blanca), cambiar los ajustes del juego y hacer respaldos. La conexión entre las dos apps va cifrada.</p>
+        <p class="muted small" style="margin-top:-4px">Esa persona necesita Servidor Home en su PC. Crea un código para ella y pásaselo por WhatsApp o Discord: lo pega en su app, en <b>Servidores de amigos</b>, y desde ahí puede encender, apagar y reiniciar, usar la consola, manejar jugadores (admins, baneos, lista blanca), cambiar los ajustes del juego y hacer respaldos. No usa playit.gg ni hay que tocar el router: las dos apps se dejan mensajes cifrados en un buzón público de internet, que no puede leerlos.</p>
         <p class="muted small">Solo ve <b>este</b> servidor. No puede ver tus otros servidores, ni agregar o quitar mods, ni cambiar la versión o la memoria, ni borrar nada. Todo lo que hace queda en la consola con su nombre, y puedes quitarle el acceso cuando quieras.</p>
         <div class="row" style="margin-top:12px">
           <input type="text" id="rName" placeholder="Nombre de quien va a administrar (ej: Ana)" maxlength="40" style="max-width:320px" autocomplete="off">
@@ -1236,7 +1236,7 @@ async function loadFriends() {
       <div class="srv-top"><div class="srv-ico">${GRASS_ICON}</div><div style="min-width:0"><div class="srv-name">${esc(f.name)}</div>
       <div class="srv-sub">Administras como ${esc(f.admin || '?')}</div></div></div>
       <div class="srv-foot"><span class="pill">Servidor de un amigo</span><button class="btn sm danger" data-fdel="${esc(f.id)}" data-fname="${esc(f.name)}">Quitar</button></div></div>`).join('')
-    || '<div class="muted small">Si alguien te pasa un código de acceso («SH1.…»), agrégalo aquí para administrar su servidor.</div>';
+    || '<div class="muted small">Si alguien te pasa un código de acceso («SH2.…»), agrégalo aquí para administrar su servidor.</div>';
   $$('[data-friend]').forEach(el => el.onclick = e => { if (!e.target.closest('[data-fdel]')) location.href = '/remoto?f=' + encodeURIComponent(el.dataset.friend); });
   $$('[data-fdel]').forEach(b => b.onclick = async () => {
     if (!(await ask(`¿Quitar «${b.dataset.fname}» de tu lista? Para volver a entrar necesitarás el código de nuevo.`, 'Quitar', 'Cancelar', true))) return;
@@ -1245,7 +1245,7 @@ async function loadFriends() {
   });
 }
 $('#bFriendAdd').onclick = async () => {
-  const code = await ask('Pega el código que te pasó el dueño del servidor.', 'Agregar', 'Cancelar', false, 'SH1.…');
+  const code = await ask('Pega el código que te pasó el dueño del servidor.', 'Agregar', 'Cancelar', false, 'SH2.…');
   if (!code) return;
   toast('Conectando con el PC de tu amigo…');
   const r = await act(() => api('amigos', { method: 'POST', json: { code } }), 'Servidor agregado.');
@@ -1261,15 +1261,12 @@ async function loadRemote() {
   if (!d || id !== CUR) return;
   renderRemote(d);
   clearTimeout(REMOTE_T);
-  if (d.invites.length && !d.address) REMOTE_T = setTimeout(loadRemote, 4000);    // esperando la dirección de playit
+  if (d.invites.length && !d.connected) REMOTE_T = setTimeout(loadRemote, 4000);    // conectando con los buzones
 }
 function renderRemote(d) {
-  const pl = STATE.playit || {};
   let warn = '';
   if (d.error) warn = d.error;
-  else if (pl.phase === 'desvinculado' || !pl.phase) warn = 'Primero conecta playit.gg en «Cómo entran tus amigos», arriba: el acceso remoto usa esa misma conexión, sin abrir puertos.';
-  else if (d.tunnel_error) warn = d.tunnel_error;
-  else if (d.invites.length && !d.address) warn = 'Preparando la dirección del acceso remoto en playit.gg… El código aparece solo en unos segundos.';
+  else if (d.invites.length && !d.connected) warn = 'Conectando con el buzón de mensajes… Los códigos ya se pueden copiar; funcionan en cuanto se conecte.';
   $('#rWarn').classList.toggle('hide', !warn); $('#rWarn').textContent = warn;
   $('#rList').innerHTML = d.invites.map(i => `<div class="invite"><div class="who"><b>${esc(i.name)}</b>
       <div class="muted small">Creado ${esc(fmtAgo(i.created))} · ${i.used ? 'entró por última vez ' + esc(fmtAgo(i.used)) : 'todavía no entra'}</div>
@@ -1288,7 +1285,7 @@ $('#bRemoteNew').onclick = async () => {
   const name = $('#rName').value.trim();
   if (!name) return toast('Escribe el nombre de quien va a administrar el servidor.', true);
   const r = await act(() => api(`servers/${encodeURIComponent(CUR)}/remoto`, { method: 'POST', json: { name } }),
-    `Listo. Cuando aparezca el código, cópialo y pásaselo a ${name}. Quien tenga el código entra: no lo publiques.`);
+    `Listo. Copia el código y pásaselo a ${name}. Quien tenga el código entra: no lo publiques.`);
   if (r) { $('#rName').value = ''; renderRemote(r); loadRemote(); }
 };
 /* ---------------- imagen y mensaje del servidor ---------------- */

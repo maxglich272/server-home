@@ -295,19 +295,16 @@ class H(BaseHTTPRequestHandler):
             tun = []
             for t in STATE["tunnels"]:
                 if time.time() - t["created"] > 2:   # "asignando" durante 2 s
-                    tcp = t.get("kind") == "custom-tcp"
-                    tun.append({"id": t["id"], "internal_id": 1, "name": t["name"], "display_address": "prueba-admin.gl.at.ply.gg:31337" if tcp else "prueba-max.gl.joinmc.link", "port_type": "tcp", "port_count": 1,
-                                "tunnel_type": None if tcp else "minecraft-java", "tunnel_type_display": "TCP" if tcp else "Minecraft Java", "agent_config": {"fields": t["fields"]}, "disabled_reason": None})
+                    tun.append({"id": t["id"], "internal_id": 1, "name": t["name"], "display_address": "prueba-max.gl.joinmc.link", "port_type": "tcp", "port_count": 1,
+                                "tunnel_type": "minecraft-java", "tunnel_type_display": "Minecraft Java", "agent_config": {"fields": t["fields"]}, "disabled_reason": None})
             pend = [{"id": t["id"], "name": t["name"], "tunnel_type": "minecraft-java", "tunnel_type_display": "Minecraft Java", "port_type": "tcp", "port_count": 1, "status_msg": "Asignando dirección…"} for t in STATE["tunnels"] if time.time() - t["created"] <= 2]
             return self.j({"status": "success", "data": {"agent_id": "11111111-2222-3333-4444-555555555555", "tunnels": tun, "pending": pend, "notices": [], "permissions": {"is_self_managed": True, "has_premium": False, "account_status": "verified"}}})
         if p == "/v1/tunnels/create":
-            assert body["ports"] in ({"type": "tunnel-type", "details": "minecraft-java"}, {"type": "custom-tcp", "details": 1}), body
+            assert body["ports"] == {"type": "tunnel-type", "details": "minecraft-java"}, body
             assert body["origin"]["type"] == "agent" and body["origin"]["data"]["agent_id"]
             STATE["created"] += 1
-            tcp = body["ports"]["type"] == "custom-tcp"     # la dirección del acceso remoto (panel web)
-            tid = "0b7c3a52-7d1e-4f3a-9c1e-2a6f0e5d4c3b" if tcp else "7c9e6679-7425-40de-944b-e07fc1f90ae7"
-            STATE["tunnels"].append({"id": tid, "name": body["name"], "fields": body["origin"]["data"]["config"]["fields"], "created": time.time(), "kind": body["ports"]["type"]})
-            return self.j({"status": "success", "data": {"id": tid}})
+            STATE["tunnels"].append({"id": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "name": body["name"], "fields": body["origin"]["data"]["config"]["fields"], "created": time.time()})
+            return self.j({"status": "success", "data": {"id": "7c9e6679-7425-40de-944b-e07fc1f90ae7"}})
         if p == "/v1/tunnels/config":
             STATE["config_calls"].append(body)
             for t in STATE["tunnels"]:
