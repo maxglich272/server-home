@@ -5698,31 +5698,99 @@ class Playit:
 
 
 # --------------------------------------------------------------------------- #
-# Administración remota: alguien de otra ciudad modera UN servidor desde su navegador
+# Administración remota: alguien de otra ciudad modera UN servidor desde SU Servidor Home
 # --------------------------------------------------------------------------- #
-# El dueño crea una invitación para un servidor y le pasa el enlace a su amigo. El enlace apunta a otra dirección
-# de playit.gg (un túnel TCP hacia REMOTE_PORT, que solo escucha en 127.0.0.1) y lleva la clave después del «#»,
-# que el navegador nunca envía. La página firma cada pedido con HMAC-SHA256 (hora, un número al azar y el cuerpo):
-# quien espíe la conexión (va sin cifrar por playit) no puede repetir ni inventar pedidos, ni sacar la clave.
-# Esa puerta solo atiende las rutas de RemoteHandler y siempre sobre el servidor de la invitación: nada de mods,
-# argumentos de Java, versiones ni borrar, porque eso permitiría ejecutar programas en este PC.
+# El dueño crea una invitación para un servidor y le pasa un código a su amigo. El amigo lo pega en «Servidores de
+# amigos» de su propia app, que se conecta por otra dirección de playit.gg (un túnel TCP hacia la puerta de
+# RemoteAccess, que solo escucha en 127.0.0.1). El código trae la dirección y una clave de 256 bits que ambas apps
+# comparten: cada pedido y cada respuesta van cifrados y firmados con ella (HMAC-SHA256 como cifrado en modo
+# contador y como firma, solo con la biblioteca estándar), así que quien espíe la conexión no ve nada ni puede
+# repetir, cambiar o inventar pedidos. A un navegador la puerta no le responde nada.
+# Solo hay rutas sobre el servidor de la invitación: nada de mods, argumentos de Java, versiones ni borrar, porque
+# eso permitiría ejecutar programas en el PC del dueño.
 
 REMOTE_FILE = os.path.join(APPDATA_DIR, "acceso-remoto.json")
+FRIENDS_FILE = os.path.join(APPDATA_DIR, "servidores-de-amigos.json")
 REMOTE_PORT_OFFSET = 15            # panel en 8765 → puerta remota en 8780
-REMOTE_CLOCK_SKEW = 120            # segundos; la página corrige su reloj con /r/api/hora
+REMOTE_PATH = "/sh-remoto"
+REMOTE_CLOCK_SKEW = 120            # segundos; si los relojes no calzan, la app del amigo se corrige sola
 REMOTE_TUNNEL_NAME = "servidor-home-admin"
 REMOTE_PROPERTIES = [k for k in EDITABLE_PROPERTIES if k != "server-port"]
 REMOTE_ID_RE = re.compile(r"^[0-9a-f]{12}$")
 REMOTE_MAX_INVITES = 20
+REMOTE_CODE_PREFIX = "SH1."
+
+
+def _remote_keys(key_hex):
+    k = bytes.fromhex(key_hex)
+    return hmac.new(k, b"cifrar", hashlib.sha256).digest(), hmac.new(k, b"firmar", hashlib.sha256).digest()
+
+
+def _remote_xor(key, nonce, data):
+    """Cifrado en flujo: bloques HMAC-SHA256(clave, número al azar + contador) mezclados con XOR."""
+    if not data:
+        return b""
+    blocks = (len(data) + 31) // 32
+    stream = b"".join(hmac.new(key, nonce + i.to_bytes(8, "big"), hashlib.sha256).digest() for i in range(blocks))
+    return (int.from_bytes(data, "big") ^ int.from_bytes(stream[:len(data)], "big")).to_bytes(len(data), "big")
+
+
+def remote_seal(key_hex, kind, iid, obj, bind=b"", ts=None):
+    """Cifra y firma obj. kind es b"pedido" o b"respuesta"; bind ata una respuesta a su pedido."""
+    enc, mac = _remote_keys(key_hex)
+    ts = int(time.time()) if ts is None else int(ts)
+    nonce = secrets.token_bytes(16)
+    ct = _remote_xor(enc, kind + nonce, json.dumps(obj, ensure_ascii=False).encode("utf-8"))
+    tag = hmac.new(mac, b"|".join([kind, iid.encode(), str(ts).encode(), nonce, bind, ct]), hashlib.sha256).hexdigest()
+    return {"id": iid, "ts": ts, "nonce": nonce.hex(), "ct": base64.b64encode(ct).decode(), "mac": tag}
+
+
+def remote_open(key_hex, kind, env, bind=b""):
+    """Comprueba la firma y descifra. PermissionError si algo no calza."""
+    try:
+        iid, ts, nonce = str(env["id"]), int(env["ts"]), bytes.fromhex(env["nonce"])
+        ct = base64.b64decode(env["ct"], validate=True)
+        tag = str(env["mac"])
+    except (KeyError, TypeError, ValueError):
+        raise PermissionError("Mensaje no válido.")
+    if len(nonce) != 16:
+        raise PermissionError("Mensaje no válido.")
+    enc, mac = _remote_keys(key_hex)
+    want = hmac.new(mac, b"|".join([kind, iid.encode(), str(ts).encode(), nonce, bind, ct]), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(want, tag):
+        raise PermissionError("Firma no válida. Pídele un código nuevo al dueño del servidor.")
+    return json.loads(_remote_xor(enc, kind + nonce, ct).decode("utf-8")), ts, nonce
+
+
+def remote_code(address, inv):
+    raw = f"{address}|{inv['id']}|{inv['key']}".encode()
+    return REMOTE_CODE_PREFIX + base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+
+def parse_remote_code(code):
+    code = re.sub(r"\s+", "", str(code or ""))
+    if not code.startswith(REMOTE_CODE_PREFIX):
+        raise ValueError("Ese no es un código de acceso de Servidor Home (empieza con «SH1.»).")
+    body = code[len(REMOTE_CODE_PREFIX):]
+    try:
+        address, iid, key = base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)).decode().split("|")
+        bytes.fromhex(key)
+    except (ValueError, UnicodeDecodeError):
+        raise ValueError("El código está incompleto. Cópialo entero de nuevo.")
+    if not REMOTE_ID_RE.match(iid) or len(key) < 32 or not re.match(r"^[A-Za-z0-9.\-]+(:\d{1,5})?$", address):
+        raise ValueError("El código está incompleto. Cópialo entero de nuevo.")
+    return address, iid, key
 
 
 class RemoteAccess:
+    """Lado del dueño: las invitaciones y la puerta por la que entran las apps de sus amigos."""
+
     def __init__(self, port):
         self.port = port
         self.lock = threading.Lock()
         self.invites = [i for i in _read_json_list(REMOTE_FILE)
                         if isinstance(i, dict) and REMOTE_ID_RE.match(str(i.get("id"))) and i.get("key")]
-        self.nonces = {}              # firma ya usada → cuándo vence (contra pedidos repetidos)
+        self.nonces = {}              # mensajes ya recibidos → cuándo vencen (contra pedidos repetidos)
         self.httpd = None
         self.error = None
 
@@ -5746,7 +5814,7 @@ class RemoteAccess:
         with self.lock:
             if len(self.invites) >= REMOTE_MAX_INVITES:
                 raise RuntimeError("Hay demasiados accesos remotos. Quita alguno que ya no se use.")
-            inv = {"id": secrets.token_hex(6), "key": secrets.token_hex(16), "server": sid, "name": name,
+            inv = {"id": secrets.token_hex(6), "key": secrets.token_hex(32), "server": sid, "name": name,
                    "created": int(time.time()), "used": 0}
             self.invites.append(inv)
             self._save()
@@ -5767,53 +5835,42 @@ class RemoteAccess:
                 self.invites = [i for i in self.invites if i["server"] != sid]
                 self._save()
 
-    def link(self, inv, address):
-        return f"http://{address}/#{inv['id']}.{inv['key']}" if address else None
-
     def state(self, sid, playit):
         address = playit.admin_address() if playit else None
         return {
             "invites": [{"id": i["id"], "name": i["name"], "created": i["created"], "used": i.get("used", 0),
-                         "link": self.link(i, address)} for i in self.invites if i["server"] == sid],
+                         "code": remote_code(address, i) if address else None}
+                        for i in self.invites if i["server"] == sid],
             "address": address, "port": self.port, "listening": self.httpd is not None, "error": self.error,
             "playit_phase": playit.phase if playit else None,
             "tunnel_error": playit.admin_error if playit else None,
         }
 
-    # ---- firma de cada pedido ----
-    def verify(self, headers, method, target, body):
-        """Devuelve la invitación si el pedido viene firmado con su clave; si no, PermissionError."""
-        iid = headers.get("X-SH-Id") or ""
-        inv = next((i for i in self.invites if i["id"] == iid), None)
+    # ---- mensajes cifrados ----
+    def open_request(self, env):
+        """Devuelve (invitación, pedido, número del pedido) o PermissionError."""
+        inv = next((i for i in self.invites if i["id"] == str(env.get("id"))), None)
         if not inv:
-            raise PermissionError("Este acceso ya no existe. Pídele un enlace nuevo al dueño del servidor.")
-        try:
-            ts = int(headers.get("X-SH-Ts") or "")
-        except ValueError:
-            raise PermissionError("Pedido sin firma.")
+            raise PermissionError("Este acceso ya no existe. Pídele un código nuevo al dueño del servidor.")
+        req, ts, nonce = remote_open(inv["key"], b"pedido", env)
         now = time.time()
         if abs(now - ts) > REMOTE_CLOCK_SKEW:
-            raise PermissionError("La hora de tu equipo no calza. Recarga la página.")
-        nonce = headers.get("X-SH-Nonce") or ""
-        if not re.match(r"^[0-9a-f]{16,64}$", nonce):
-            raise PermissionError("Pedido sin firma.")
-        msg = "\n".join([method, target, str(ts), nonce, hashlib.sha256(body).hexdigest()]).encode("utf-8")
-        want = hmac.new(bytes.fromhex(inv["key"]), msg, hashlib.sha256).hexdigest()
-        if not hmac.compare_digest(want, (headers.get("X-SH-Firma") or "").lower()):
-            raise PermissionError("Firma no válida. Abre de nuevo el enlace que te pasaron.")
+            raise PermissionError("hora")
         with self.lock:
             for k in [k for k, exp in self.nonces.items() if exp < now]:
                 del self.nonces[k]
-            if want in self.nonces:
+            if nonce in self.nonces:
                 raise PermissionError("Pedido repetido.")
-            self.nonces[want] = now + 2 * REMOTE_CLOCK_SKEW
+            self.nonces[nonce] = now + 2 * REMOTE_CLOCK_SKEW
             if now - inv.get("used", 0) > 60:
                 inv["used"] = int(now)
                 try:
                     self._save()
                 except OSError:
                     pass
-        return inv
+        if not isinstance(req, dict):
+            raise PermissionError("Mensaje no válido.")
+        return inv, req, nonce
 
     # ---- la puerta (solo en este PC; playit la lleva a internet) ----
     def start(self):
@@ -5839,7 +5896,7 @@ class RemoteAccess:
 
 
 class RemoteHandler(BaseHTTPRequestHandler):
-    """Lo único que se puede hacer desde afuera: siempre sobre el servidor de la invitación firmada."""
+    """La puerta del dueño: solo mensajes cifrados de apps con una invitación, en POST /sh-remoto."""
     server_version = "ServidorHome"
 
     def log_message(self, fmt, *args):
@@ -5854,139 +5911,210 @@ class RemoteHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def route(self, method):
-        try:
-            n = int(self.headers.get("Content-Length") or 0)
-            if n > 64 * 1024:
-                raise ValueError("Solicitud demasiado grande.")
-            body = self.rfile.read(n) if n > 0 else b""
-            self.dispatch(method, body)
-        except PermissionError as e:
-            self.send_json({"error": str(e), "auth": True}, 401)
-        except KeyError:
-            self.send_json({"error": "No encontrado."}, 404)
-        except (ValueError, RuntimeError) as e:
-            self.send_json({"error": str(e)}, 400)
-        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
-            pass
-        except Exception as e:
-            traceback.print_exc()
-            self.send_json({"error": f"Error interno: {e}"}, 500)
+    def nothing(self):
+        self.send_response(404)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
-    def do_GET(self):
-        self.route("GET")
+    do_GET = do_PUT = do_DELETE = do_HEAD = nothing
 
     def do_POST(self):
-        self.route("POST")
-
-    def do_PUT(self):
-        self.route("PUT")
-
-    def dispatch(self, method, body):
-        u = urllib.parse.urlparse(self.path)
-        if method == "GET" and u.path in ("/", "/index.html"):
-            data = _read_bytes(os.path.join(WEB_DIR, "remoto.html"))
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(data)))
-            self.send_header("Cache-Control", "no-store")
-            self.send_header("X-Frame-Options", "DENY")
-            self.send_header("Referrer-Policy", "no-referrer")
-            self.end_headers()
-            self.wfile.write(data)
+        try:
+            if self.path != REMOTE_PATH or not manager or not manager.remote:
+                return self.nothing()
+            n = int(self.headers.get("Content-Length") or 0)
+            if not 0 < n <= 256 * 1024:
+                raise PermissionError("Mensaje no válido.")
+            env = json.loads(self.rfile.read(n).decode("utf-8"))
+            if not isinstance(env, dict):
+                raise PermissionError("Mensaje no válido.")
+            inv, req, nonce = manager.remote.open_request(env)
+        except PermissionError as e:
+            return self.send_json({"error": str(e), "auth": True, "t": int(time.time())}, 401)
+        except (ValueError, UnicodeDecodeError):
+            return self.send_json({"error": "Mensaje no válido.", "auth": True, "t": int(time.time())}, 401)
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
             return
-        if method == "GET" and u.path == "/r/api/hora":
-            return self.send_json({"t": int(time.time())})
-        if not u.path.startswith("/r/api/") or not manager or not manager.remote:
-            raise KeyError()
-        inv = manager.remote.verify(self.headers, method, self.path, body)
-        s = manager.servers.get(inv["server"])
-        if not s:
-            raise PermissionError("Ese servidor ya no existe en el PC de tu amigo.")
-        p = u.path[len("/r/api/"):].strip("/")
-        q = {k: v[0] for k, v in urllib.parse.parse_qs(u.query).items()}
-        data = json.loads(body.decode("utf-8")) if body else {}
-        if not isinstance(data, dict):
-            raise ValueError("Solicitud no válida.")
-        who = inv["name"]
+        try:
+            code, data = remote_action(inv, str(req.get("method") or "GET"), str(req.get("path") or ""),
+                                       req.get("body") if isinstance(req.get("body"), dict) else {})
+        except KeyError:
+            code, data = 404, {"error": "No encontrado."}
+        except (ValueError, RuntimeError, PermissionError) as e:
+            code, data = 400, {"error": str(e)}
+        except Exception as e:
+            traceback.print_exc()
+            code, data = 500, {"error": f"Error interno: {e}"}
+        try:
+            self.send_json(remote_seal(inv["key"], b"respuesta", inv["id"], {"status": code, "data": data}, bind=nonce))
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            pass
 
-        if method == "GET" and p == "estado":
-            d = s.summary()
-            keep = ("name", "type_label", "mc_version", "loader_version", "status", "error", "hint", "players",
-                    "max_players", "online_mode", "whitelist", "uptime", "mods_active", "addons_dir", "installed",
-                    "progress", "icon")
-            out = {k: d.get(k) for k in keep}
-            out["admin"] = who
-            out["address"] = manager.playit.address() if manager.playit else None
-            return self.send_json(out)
-        if method == "GET" and p == "icono":
-            if not os.path.isfile(s.icon_path):
-                raise KeyError()
-            data = _read_bytes(s.icon_path)
-            self.send_response(200)
-            self.send_header("Content-Type", "image/png")
-            self.send_header("Content-Length", str(len(data)))
-            self.send_header("Cache-Control", "no-store")
-            self.end_headers()
-            self.wfile.write(data)
-            return
-        if method == "POST" and p in ("encender", "apagar", "reiniciar", "forzar"):
-            if p == "encender":
-                s.log(f"{who} enciende el servidor (acceso remoto).")
-                s.start(user=True)
-            elif p == "apagar":
-                s.log(f"{who} apaga el servidor (acceso remoto).")
-                s.stop()
-            elif p == "reiniciar":
-                s.log(f"{who} reinicia el servidor (acceso remoto).")
-                s.stop(restart=True)
-            else:
-                s.log(f"{who} fuerza el cierre del servidor (acceso remoto).", "err")
-                s.kill()
-            return self.send_json({"ok": True, "status": s.status})
-        if method == "GET" and p == "consola":
-            last, lines = s.console.since(int(q.get("since", 0)))
-            return self.send_json({"last": last, "lines": lines, "status": s.status, "players": sorted(s.players)})
-        if method == "POST" and p == "comando":
-            cmd = re.sub(r"[\x00-\x1f\x7f]", " ", str(data.get("command") or "")).strip()[:300]
-            if not cmd:
-                raise ValueError("Escribe un comando.")
-            s.console.add(f"({who} desde el acceso remoto)", "app")
-            s.send(cmd)
-            return self.send_json({"ok": True})
-        if p == "jugadores":
-            if method == "GET":
-                return self.send_json(s.players_info())
-            if method == "POST":
-                s.log(f"{who}: {data.get('action')} {data.get('name')} (acceso remoto).")
-                return self.send_json(s.player_action(data.get("action"), data.get("name"), data.get("reason", "")))
-        if p == "propiedades":
-            path = os.path.join(s.dir, "server.properties")
-            if method == "GET":
-                props = read_properties(path)
-                out = {k: props.get(k, "") for k in REMOTE_PROPERTIES}
-                out["motd"] = prop_unescape(out["motd"])
-                return self.send_json(out)
-            if method == "PUT":
-                clean = {}
-                for k, v in (data.get("properties") or {}).items():
-                    if k not in REMOTE_PROPERTIES:
-                        raise ValueError(f"Ese ajuste solo lo puede cambiar el dueño: {k}")
-                    clean[k] = clean_prop_value(v)
-                if "motd" in clean:
-                    clean["motd"] = prop_escape(clean["motd"])
-                write_properties(path, clean)
-                s.log(f"{who} cambió los ajustes ({', '.join(clean) or 'ninguno'}) desde el acceso remoto. "
-                      "Se aplican la próxima vez que se encienda.")
-                return self.send_json({"ok": True})
-        if p == "respaldos":
-            if method == "GET":
-                return self.send_json(s.list_backups())
-            if method == "POST":
-                name = s.backup()
-                s.log(f"Respaldo pedido por {who} (acceso remoto).")
-                return self.send_json({"name": name})
-        raise KeyError()
+
+def remote_action(inv, method, path, data):
+    """Lo único que se puede hacer desde afuera, siempre sobre el servidor de la invitación. Devuelve (código, datos)."""
+    s = manager.servers.get(inv["server"])
+    if not s:
+        return 404, {"error": "Ese servidor ya no existe en el PC de tu amigo."}
+    u = urllib.parse.urlparse(path)
+    p = u.path.strip("/")
+    q = {k: v[0] for k, v in urllib.parse.parse_qs(u.query).items()}
+    who = inv["name"]
+
+    if method == "GET" and p == "estado":
+        d = s.summary()
+        keep = ("name", "type_label", "mc_version", "loader_version", "status", "error", "hint", "players",
+                "max_players", "online_mode", "whitelist", "uptime", "mods_active", "addons_dir", "installed", "progress")
+        out = {k: d.get(k) for k in keep}
+        out["admin"] = who
+        out["address"] = manager.playit.address() if manager.playit else None
+        return 200, out
+    if method == "POST" and p in ("encender", "apagar", "reiniciar", "forzar"):
+        if p == "encender":
+            s.log(f"{who} enciende el servidor (acceso remoto).")
+            s.start(user=True)
+        elif p == "apagar":
+            s.log(f"{who} apaga el servidor (acceso remoto).")
+            s.stop()
+        elif p == "reiniciar":
+            s.log(f"{who} reinicia el servidor (acceso remoto).")
+            s.stop(restart=True)
+        else:
+            s.log(f"{who} fuerza el cierre del servidor (acceso remoto).", "err")
+            s.kill()
+        return 200, {"ok": True, "status": s.status}
+    if method == "GET" and p == "consola":
+        last, lines = s.console.since(int(q.get("since", 0)))
+        return 200, {"last": last, "lines": lines, "status": s.status, "players": sorted(s.players)}
+    if method == "POST" and p == "comando":
+        cmd = re.sub(r"[\x00-\x1f\x7f]", " ", str(data.get("command") or "")).strip()[:300]
+        if not cmd:
+            raise ValueError("Escribe un comando.")
+        s.console.add(f"({who} desde el acceso remoto)", "app")
+        s.send(cmd)
+        return 200, {"ok": True}
+    if p == "jugadores":
+        if method == "GET":
+            return 200, s.players_info()
+        if method == "POST":
+            s.log(f"{who}: {data.get('action')} {data.get('name')} (acceso remoto).")
+            return 200, s.player_action(data.get("action"), data.get("name"), data.get("reason", ""))
+    if p == "propiedades":
+        path = os.path.join(s.dir, "server.properties")
+        if method == "GET":
+            props = read_properties(path)
+            out = {k: props.get(k, "") for k in REMOTE_PROPERTIES}
+            out["motd"] = prop_unescape(out["motd"])
+            return 200, out
+        if method == "PUT":
+            clean = {}
+            for k, v in (data.get("properties") or {}).items():
+                if k not in REMOTE_PROPERTIES:
+                    raise ValueError(f"Ese ajuste solo lo puede cambiar el dueño: {k}")
+                clean[k] = clean_prop_value(v)
+            if "motd" in clean:
+                clean["motd"] = prop_escape(clean["motd"])
+            write_properties(path, clean)
+            s.log(f"{who} cambió los ajustes ({', '.join(clean) or 'ninguno'}) desde el acceso remoto. "
+                  "Se aplican la próxima vez que se encienda.")
+            return 200, {"ok": True}
+    if p == "respaldos":
+        if method == "GET":
+            return 200, s.list_backups()
+        if method == "POST":
+            name = s.backup()
+            s.log(f"Respaldo pedido por {who} (acceso remoto).")
+            return 200, {"name": name}
+    raise KeyError()
+
+
+class RemoteFriends:
+    """Lado del amigo: los servidores de otras personas que puede administrar con un código."""
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.items = [f for f in _read_json_list(FRIENDS_FILE) if isinstance(f, dict) and f.get("fid") and f.get("key")]
+        self.offsets = {}             # diferencia de reloj con el PC de cada amigo
+
+    def _save(self):
+        os.makedirs(os.path.dirname(FRIENDS_FILE), exist_ok=True)
+        _write_json_list(FRIENDS_FILE, self.items)
+        if not IS_WINDOWS:
+            try:
+                os.chmod(FRIENDS_FILE, 0o600)
+            except OSError:
+                pass
+
+    def list(self):
+        return [{"id": f["fid"], "name": f.get("name") or "?", "admin": f.get("admin"), "address": f["address"],
+                 "added": f.get("added")} for f in self.items]
+
+    def get(self, fid):
+        f = next((f for f in self.items if f["fid"] == fid), None)
+        if not f:
+            raise KeyError(fid)
+        return f
+
+    def add(self, code):
+        address, iid, key = parse_remote_code(code)
+        entry = {"fid": secrets.token_hex(4), "address": address, "id": iid, "key": key, "added": int(time.time())}
+        status, d = self._call(entry, "GET", "estado")
+        if status != 200:
+            raise RuntimeError(d.get("error") or "El PC de tu amigo no aceptó el código.")
+        entry["name"], entry["admin"] = d.get("name"), d.get("admin")
+        with self.lock:
+            old = next((f for f in self.items if f["id"] == iid), None)
+            if old:
+                entry["fid"] = old["fid"]
+                self.items.remove(old)
+            self.items.append(entry)
+            self._save()
+        return {"id": entry["fid"], "name": entry["name"]}
+
+    def remove(self, fid):
+        with self.lock:
+            self.items.remove(self.get(fid))
+            self._save()
+
+    def request(self, fid, method, path, body=None):
+        f = self.get(fid)
+        status, data = self._call(f, method, path, body)
+        if status == 200 and path == "estado" and data.get("name") and data.get("name") != f.get("name"):
+            f["name"] = data["name"]
+            try:
+                self._save()
+            except OSError:
+                pass
+        return status, data
+
+    def _call(self, f, method, path, body=None, retry=True):
+        env = remote_seal(f["key"], b"pedido", f["id"], {"method": method, "path": path, "body": body or {}},
+                          ts=time.time() + self.offsets.get(f["id"], 0))
+        req = urllib.request.Request(f"http://{f['address']}{REMOTE_PATH}", data=json.dumps(env).encode(),
+                                     method="POST", headers={"Content-Type": "application/json", "User-Agent": USER_AGENT})
+        try:
+            with urllib.request.urlopen(req, timeout=20) as r:
+                reply = json.loads(r.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            try:
+                err = json.loads(e.read().decode("utf-8"))
+            except ValueError:
+                err = {}
+            if e.code == 401 and err.get("error") == "hora" and retry and isinstance(err.get("t"), int):
+                self.offsets[f["id"]] = err["t"] - time.time()          # relojes distintos: corregimos y reintentamos
+                return self._call(f, method, path, body, retry=False)
+            if e.code == 401:
+                return 401, {"error": err.get("error") or "El PC de tu amigo rechazó el acceso.", "auth": True}
+            raise RuntimeError(f"El PC de tu amigo respondió con un error ({e.code}).")
+        except (urllib.error.URLError, OSError, ValueError) as e:
+            reason = getattr(e, "reason", e)
+            raise RuntimeError(f"No pude conectarme con el PC de tu amigo ({reason}). Revisa que tenga Servidor "
+                               "Home abierto y conectado a playit.gg.")
+        try:
+            inner, _ts, _n = remote_open(f["key"], b"respuesta", reply, bind=bytes.fromhex(env["nonce"]))
+        except (PermissionError, ValueError, AttributeError, TypeError):
+            raise RuntimeError("La respuesta del PC de tu amigo llegó alterada o no es válida.")
+        return int(inner.get("status") or 500), inner.get("data")
 
 
 def _read_bytes(path):
@@ -6540,6 +6668,7 @@ class Manager:
                 shutil.rmtree(full, ignore_errors=True)   # importación que quedó a medias
         self.playit = None
         self.remote = None
+        self.friends = None
 
     def get(self, sid):
         s = self.servers.get(sid)
@@ -7309,6 +7438,8 @@ class Handler(BaseHTTPRequestHandler):
     def dispatch(self, method, parts, q):
         if method == "GET" and (not parts or parts == ["index.html"]):
             return self.send_file(os.path.join(WEB_DIR, "index.html"), "text/html; charset=utf-8")
+        if method == "GET" and parts == ["remoto"]:             # panel de un servidor de un amigo
+            return self.send_file(os.path.join(WEB_DIR, "remoto.html"), "text/html; charset=utf-8", no_store=True)
         if not parts or parts[0] != "api":
             raise KeyError()
         p = parts[1:]
@@ -7436,6 +7567,25 @@ class Handler(BaseHTTPRequestHandler):
                 if method == "POST" and len(p) == 3 and p[2] == "confirm":
                     s = manager.confirm_import(job, self.body_json())
                     return self.send_json(s.summary(), 201)
+
+        # ---- servidores de amigos (acceso remoto, lado del amigo) ----
+        if p and p[0] == "amigos":
+            fr = manager.friends
+            if p == ["amigos"]:
+                if method == "GET":
+                    return self.send_json(fr.list())
+                if method == "POST":
+                    return self.send_json(fr.add(self.body_json().get("code")), 201)
+            if method == "DELETE" and len(p) == 2:
+                fr.remove(p[1])
+                return self.send_json({"ok": True})
+            if len(p) >= 3:
+                query = urllib.parse.urlparse(self.path).query
+                path = "/".join(p[2:]) + ("?" + query if query else "")
+                body = self.body_json() if method in ("POST", "PUT") else None
+                status, data = fr.request(p[1], method, path, body)
+                return self.send_json(data if data is not None else {}, status)
+            raise KeyError()
 
         # ---- playit.gg ----
         if p and p[0] == "playit":
@@ -7923,6 +8073,7 @@ def main():
     manager = Manager()
     manager.playit = Playit()
     manager.remote = RemoteAccess(args.port + REMOTE_PORT_OFFSET)
+    manager.friends = RemoteFriends()
     if manager.remote.wanted():
         manager.remote.start()
         manager.playit.set_admin_port(manager.remote.port)

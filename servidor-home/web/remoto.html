@@ -3,8 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="referrer" content="no-referrer">
-<title>Servidor Home · Acceso remoto</title>
+<title>Servidor Home · Servidor de un amigo</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%235a8f29'/%3E%3Crect y='5' width='16' height='11' fill='%23795533'/%3E%3Crect y='5' width='16' height='2' fill='%236aa531'/%3E%3C/svg%3E">
 <style>
 :root{
@@ -73,21 +72,21 @@ td{padding:7px 8px;border-bottom:1px solid var(--line);font-size:14px}
 <body>
 <header>
   <svg class="logo" viewBox="0 0 16 16"><rect width="16" height="16" fill="#5a8f29"/><rect y="5" width="16" height="11" fill="#795533"/><rect y="5" width="16" height="2" fill="#6aa531"/><rect x="2" y="9" width="2" height="2" fill="#634329"/><rect x="9" y="11" width="2" height="2" fill="#634329"/></svg>
-  <h1>Servidor Home<small>Acceso remoto</small></h1>
+  <h1>Servidor Home<small>Servidor de un amigo</small></h1>
   <div class="sp"></div>
   <span class="muted small" id="who"></span>
+  <a class="btn sm" href="/" style="text-decoration:none;color:inherit">← Mis servidores</a>
 </header>
 
 <div class="wrap">
   <section class="gate hide" id="gate">
-    <h2 id="gateTitle">Necesitas un enlace de acceso</h2>
-    <p class="muted" id="gateText">Pídele al dueño del servidor que te pase el enlace de acceso remoto y ábrelo en este navegador.</p>
+    <h2 id="gateTitle">Conectando…</h2>
+    <p class="muted" id="gateText">Conectando con el PC de tu amigo.</p>
   </section>
 
   <section class="hide" id="view">
     <div class="card">
       <div class="hero">
-        <img class="sicon hide" id="vIcon" alt="">
         <div class="info">
           <h2 id="vName"></h2>
           <div class="muted small" id="vSub"></div>
@@ -153,75 +152,15 @@ const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-/* ---- SHA-256 y HMAC en JavaScript: por http (sin https) el navegador no deja usar crypto.subtle ---- */
-const K256 = new Uint32Array([
-  0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
-  0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
-  0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
-  0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
-  0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
-  0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2]);
-function sha256(bytes) {
-  const l = bytes.length, n = ((l + 9 + 63) >> 6) << 6;
-  const m = new Uint8Array(n); m.set(bytes); m[l] = 0x80;
-  const dv = new DataView(m.buffer);
-  dv.setUint32(n - 8, Math.floor(l / 0x20000000)); dv.setUint32(n - 4, (l << 3) >>> 0);
-  const H = new Uint32Array([0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19]);
-  const W = new Uint32Array(64);
-  for (let o = 0; o < n; o += 64) {
-    for (let i = 0; i < 16; i++) W[i] = dv.getUint32(o + i * 4);
-    for (let i = 16; i < 64; i++) {
-      const x = W[i - 15], y = W[i - 2];
-      const s0 = ((x >>> 7) | (x << 25)) ^ ((x >>> 18) | (x << 14)) ^ (x >>> 3);
-      const s1 = ((y >>> 17) | (y << 15)) ^ ((y >>> 19) | (y << 13)) ^ (y >>> 10);
-      W[i] = (W[i - 16] + s0 + W[i - 7] + s1) | 0;
-    }
-    let a = H[0], b = H[1], c = H[2], d = H[3], e = H[4], f = H[5], g = H[6], h = H[7];
-    for (let i = 0; i < 64; i++) {
-      const S1 = ((e >>> 6) | (e << 26)) ^ ((e >>> 11) | (e << 21)) ^ ((e >>> 25) | (e << 7));
-      const t1 = (h + S1 + ((e & f) ^ (~e & g)) + K256[i] + W[i]) | 0;
-      const S0 = ((a >>> 2) | (a << 30)) ^ ((a >>> 13) | (a << 19)) ^ ((a >>> 22) | (a << 10));
-      const t2 = (S0 + ((a & b) ^ (a & c) ^ (b & c))) | 0;
-      h = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0;
-    }
-    H[0] += a; H[1] += b; H[2] += c; H[3] += d; H[4] += e; H[5] += f; H[6] += g; H[7] += h;
-  }
-  const out = new Uint8Array(32); const ov = new DataView(out.buffer);
-  H.forEach((v, i) => ov.setUint32(i * 4, v));
-  return out;
-}
-const hex = b => [...b].map(x => x.toString(16).padStart(2, '0')).join('');
-const unhex = s => new Uint8Array(s.match(/../g).map(x => parseInt(x, 16)));
-const utf8 = s => new TextEncoder().encode(s);
-function hmac256(key, msg) {
-  if (key.length > 64) key = sha256(key);
-  const ip = new Uint8Array(64 + msg.length), op = new Uint8Array(64 + 32);
-  for (let i = 0; i < 64; i++) { const k = key[i] || 0; ip[i] = k ^ 0x36; op[i] = k ^ 0x5c; }
-  ip.set(msg, 64); op.set(sha256(ip), 64);
-  return sha256(op);
-}
-
-/* ---- la clave viene en el enlace, después del «#» (el navegador no la envía nunca) ---- */
-let AUTH = null, OFFSET = 0, STOPPED = false;
-try {
-  const m = location.hash.match(/^#([0-9a-f]{12})\.([0-9a-f]{32})$/);
-  if (m) { AUTH = { id: m[1], key: m[2] }; try { localStorage.setItem('sh-remoto', JSON.stringify(AUTH)); } catch { } }
-  else AUTH = JSON.parse(localStorage.getItem('sh-remoto') || 'null');
-} catch { }
-if (location.hash) history.replaceState(null, '', location.pathname);
-
-function randomHex(n) { const b = new Uint8Array(n); crypto.getRandomValues(b); return hex(b); }
+/* ---- un servidor de un amigo: esta app habla con la suya (cifrado) y aquí solo se usa /api/amigos ---- */
+const FID = new URLSearchParams(location.search).get('f') || '';
+let STOPPED = false;
 async function api(path, opts = {}) {
-  const method = opts.method || 'GET';
-  const body = opts.json !== undefined ? JSON.stringify(opts.json) : '';
-  const target = '/r/api/' + path;
-  const ts = String(Math.floor(Date.now() / 1000) + OFFSET), nonce = randomHex(16);
-  const msg = [method, target, ts, nonce, hex(sha256(utf8(body)))].join('\n');
-  const headers = { 'X-SH-Id': AUTH.id, 'X-SH-Ts': ts, 'X-SH-Nonce': nonce, 'X-SH-Firma': hex(hmac256(unhex(AUTH.key), utf8(msg))) };
-  if (body) headers['Content-Type'] = 'application/json';
-  const r = await fetch(target, { method, headers, body: body || undefined, cache: 'no-store' });
+  const o = { method: opts.method || 'GET', headers: {}, cache: 'no-store' };
+  if (opts.json !== undefined) { o.body = JSON.stringify(opts.json); o.headers['Content-Type'] = 'application/json'; }
+  const r = await fetch(`/api/amigos/${encodeURIComponent(FID)}/${path}`, o);
   const data = await r.json().catch(() => ({}));
-  if (r.status === 401 && data.auth) { gate('Sin acceso', data.error); if (/ya no existe/.test(data.error || '')) { try { localStorage.removeItem('sh-remoto'); } catch { } } }
+  if (r.status === 401 && data.auth) gate('Sin acceso', data.error);
   if (!r.ok) throw new Error(data.error || ('Error ' + r.status));
   return data;
 }
@@ -253,13 +192,13 @@ const STATUS = {
   'instalando': ['busy', 'Instalando…'], 'reparando': ['busy', 'Arreglando un problema…'], 'detenido': ['', 'Apagado'],
   'sin instalar': ['', 'Sin instalar'], 'error': ['err', 'Con problemas'],
 };
-let S = null, ICON = 0;
+let S = null;
 async function refresh() {
   if (STOPPED || document.hidden) return;
-  try { S = await api('estado'); } catch { return; }
+  try { S = await api('estado'); } catch (e) { if (!S) $('#gateText').textContent = e.message + ' Esta página reintenta sola.'; return; }
   $('#gate').classList.add('hide'); $('#view').classList.remove('hide');
-  $('#who').textContent = 'Entraste como ' + S.admin;
-  $('#vName').textContent = S.name; document.title = S.name + ' · Acceso remoto';
+  $('#who').textContent = 'Administras como ' + S.admin;
+  $('#vName').textContent = S.name; document.title = S.name + ' · Servidor de un amigo';
   $('#vSub').textContent = `${S.type_label}${S.loader_version ? ' ' + S.loader_version : ''} · Minecraft ${S.mc_version || '?'}${S.addons_dir === 'mods' ? ` · ${S.mods_active} mods` : ''}`;
   const [cls, txt] = STATUS[S.status] || ['', S.status];
   let t = txt;
@@ -272,18 +211,6 @@ async function refresh() {
   const hint = S.hint || S.error || '';
   $('#vHint').classList.toggle('hide', !hint); $('#vHint').textContent = hint;
   $('#addrRow').classList.toggle('hide', !S.address); $('#vAddr').textContent = S.address || '';
-  if (S.icon && S.icon !== ICON) { ICON = S.icon; loadIcon(); }
-}
-async function loadIcon() {
-  // la imagen también va firmada: se pide con fetch y se muestra desde la memoria
-  const ts = String(Math.floor(Date.now() / 1000) + OFFSET), nonce = randomHex(16), target = '/r/api/icono';
-  const msg = ['GET', target, ts, nonce, hex(sha256(new Uint8Array()))].join('\n');
-  try {
-    const r = await fetch(target, { headers: { 'X-SH-Id': AUTH.id, 'X-SH-Ts': ts, 'X-SH-Nonce': nonce, 'X-SH-Firma': hex(hmac256(unhex(AUTH.key), utf8(msg))) } });
-    if (!r.ok) return;
-    const url = URL.createObjectURL(await r.blob());
-    $('#vIcon').src = url; $('#vIcon').classList.remove('hide');
-  } catch { }
 }
 async function power(what, label, okMsg) {
   if (label && !(await ask(label, what === 'apagar' ? 'Apagar' : 'Reiniciar', what === 'apagar'))) return;
@@ -412,12 +339,14 @@ $$('.tab').forEach(el => el.onclick = () => setTab(el.dataset.t));
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { refresh(); pollLog(); } });
 
 (async () => {
-  if (!AUTH) { $('#gate').classList.remove('hide'); return; }
-  try { const r = await (await fetch('/r/api/hora', { cache: 'no-store' })).json(); OFFSET = r.t - Math.floor(Date.now() / 1000); } catch { }
-  await refresh();
+  if (!FID) { gate('Falta el servidor', 'Vuelve a «Mis servidores» y elige un servidor de un amigo.'); return; }
+  $('#gate').classList.remove('hide');
+  let err = '';
+  try { S = await api('estado'); } catch (e) { err = e.message; }
   if (STOPPED) return;
-  if (!S) {
-    gate('No hay conexión', 'No pude conectarme con el servidor. Puede que el PC de tu amigo esté apagado o que Servidor Home no esté abierto. Esta página reintenta sola.');
+  if (S) await refresh();
+  else {
+    gate('No hay conexión', err + ' Esta página reintenta sola.');
     STOPPED = false;
   }
   pollLog();

@@ -299,6 +299,13 @@ details summary{cursor:pointer;color:var(--muted);margin:6px 0}
     <div class="srv-grid" id="srvGrid"></div>
   </section>
 
+  <!-- Servidores de amigos (acceso remoto con un código) -->
+  <section id="friends" class="hide" style="margin-top:26px">
+    <div class="home-title"><div><h2 style="font-size:21px">Servidores de amigos</h2><div class="muted small">Servidores de otras personas que te dieron acceso para administrarlos.</div></div>
+      <button class="btn sm" id="bFriendAdd">＋ Agregar con un código</button></div>
+    <div class="srv-grid" id="friendGrid"></div>
+  </section>
+
   <!-- Servidor -->
   <section id="view" class="hide">
     <div class="card">
@@ -479,11 +486,11 @@ details summary{cursor:pointer;color:var(--muted);margin:6px 0}
     <section data-p="remote" class="hide">
       <div class="card">
         <h3>Deja que alguien de otra ciudad administre este servidor</h3>
-        <p class="muted small" style="margin-top:-4px">Crea un enlace para esa persona y pásaselo por WhatsApp o Discord. Lo abre en su navegador, sin instalar nada, y puede encender, apagar y reiniciar, usar la consola, manejar jugadores (admins, baneos, lista blanca), cambiar los ajustes del juego y hacer respaldos.</p>
+        <p class="muted small" style="margin-top:-4px">Esa persona necesita Servidor Home en su PC. Crea un código para ella y pásaselo por WhatsApp o Discord: lo pega en su app, en <b>Servidores de amigos</b>, y desde ahí puede encender, apagar y reiniciar, usar la consola, manejar jugadores (admins, baneos, lista blanca), cambiar los ajustes del juego y hacer respaldos. La conexión entre las dos apps va cifrada.</p>
         <p class="muted small">Solo ve <b>este</b> servidor. No puede ver tus otros servidores, ni agregar o quitar mods, ni cambiar la versión o la memoria, ni borrar nada. Todo lo que hace queda en la consola con su nombre, y puedes quitarle el acceso cuando quieras.</p>
         <div class="row" style="margin-top:12px">
           <input type="text" id="rName" placeholder="Nombre de quien va a administrar (ej: Ana)" maxlength="40" style="max-width:320px" autocomplete="off">
-          <button class="btn primary" id="bRemoteNew">Crear enlace</button>
+          <button class="btn primary" id="bRemoteNew">Crear código</button>
         </div>
         <div class="warnbox hide" id="rWarn"></div>
       </div>
@@ -629,7 +636,7 @@ function ask(text, okLabel = 'Sí', cancelLabel = 'Cancelar', danger = false, in
     const bg = document.createElement('div');
     bg.className = 'modal-bg open'; bg.style.zIndex = 30; bg.style.alignItems = 'center';
     bg.innerHTML = `<div class="modal" role="dialog" style="width:min(460px,100%)"><div style="white-space:pre-wrap;font-size:15.5px">${esc(text)}</div>
-      ${input !== null ? `<input type="text" class="ask-in" maxlength="120" placeholder="${esc(input)}" style="width:100%;margin-top:14px">` : ''}
+      ${input !== null ? `<input type="text" class="ask-in" maxlength="400" placeholder="${esc(input)}" style="width:100%;margin-top:14px">` : ''}
       <div class="foot"><button class="btn" data-a="0">${esc(cancelLabel)}</button><button class="btn ${danger ? 'danger fill' : 'primary'}" data-a="1">${esc(okLabel)}</button></div></div>`;
     const inp = bg.querySelector('.ask-in');
     const done = v => { bg.remove(); document.removeEventListener('keydown', key, true); resolve(v && inp ? inp.value.trim() : v); };
@@ -673,6 +680,8 @@ async function refresh() {
   $('#view').classList.toggle('hide', !CUR);
   document.body.classList.toggle('in-server', !!CUR);
   if (!CUR) renderHome(servers);
+  $('#friends').classList.toggle('hide', !!CUR);
+  if (!CUR) loadFriends();
   const s = cur(); if (s) renderServer(s);
   renderPlayit();
 }
@@ -1216,6 +1225,33 @@ async function deleteServer(typed) {
 $('#bDelete').onclick = () => deleteServer($('#delConfirm').value);
 $('#bDeleteTop').onclick = () => deleteServer();
 
+/* ---------------- servidores de amigos ---------------- */
+let FRIENDS_KEY = '', FRIENDS_T = 0;
+async function loadFriends() {
+  if (Date.now() - FRIENDS_T < 10000) return;       // la lista cambia poco
+  FRIENDS_T = Date.now();
+  const list = await api('amigos').catch(() => null); if (!list) return;
+  const key = JSON.stringify(list); if (key === FRIENDS_KEY) return; FRIENDS_KEY = key;
+  $('#friendGrid').innerHTML = list.map(f => `<div class="srv" data-friend="${esc(f.id)}">
+      <div class="srv-top"><div class="srv-ico">${GRASS_ICON}</div><div style="min-width:0"><div class="srv-name">${esc(f.name)}</div>
+      <div class="srv-sub">Administras como ${esc(f.admin || '?')}</div></div></div>
+      <div class="srv-foot"><span class="pill">Servidor de un amigo</span><button class="btn sm danger" data-fdel="${esc(f.id)}" data-fname="${esc(f.name)}">Quitar</button></div></div>`).join('')
+    || '<div class="muted small">Si alguien te pasa un código de acceso («SH1.…»), agrégalo aquí para administrar su servidor.</div>';
+  $$('[data-friend]').forEach(el => el.onclick = e => { if (!e.target.closest('[data-fdel]')) location.href = '/remoto?f=' + encodeURIComponent(el.dataset.friend); });
+  $$('[data-fdel]').forEach(b => b.onclick = async () => {
+    if (!(await ask(`¿Quitar «${b.dataset.fname}» de tu lista? Para volver a entrar necesitarás el código de nuevo.`, 'Quitar', 'Cancelar', true))) return;
+    await act(() => api('amigos/' + encodeURIComponent(b.dataset.fdel), { method: 'DELETE' }));
+    FRIENDS_T = 0; loadFriends();
+  });
+}
+$('#bFriendAdd').onclick = async () => {
+  const code = await ask('Pega el código que te pasó el dueño del servidor.', 'Agregar', 'Cancelar', false, 'SH1.…');
+  if (!code) return;
+  toast('Conectando con el PC de tu amigo…');
+  const r = await act(() => api('amigos', { method: 'POST', json: { code } }), 'Servidor agregado.');
+  if (r) location.href = '/remoto?f=' + encodeURIComponent(r.id);
+};
+
 /* ---------------- acceso remoto ---------------- */
 let REMOTE_T = 0;
 async function loadRemote() {
@@ -1233,17 +1269,17 @@ function renderRemote(d) {
   if (d.error) warn = d.error;
   else if (pl.phase === 'desvinculado' || !pl.phase) warn = 'Primero conecta playit.gg en «Cómo entran tus amigos», arriba: el acceso remoto usa esa misma conexión, sin abrir puertos.';
   else if (d.tunnel_error) warn = d.tunnel_error;
-  else if (d.invites.length && !d.address) warn = 'Preparando la dirección del acceso remoto en playit.gg… Aparece sola en unos segundos.';
+  else if (d.invites.length && !d.address) warn = 'Preparando la dirección del acceso remoto en playit.gg… El código aparece solo en unos segundos.';
   $('#rWarn').classList.toggle('hide', !warn); $('#rWarn').textContent = warn;
   $('#rList').innerHTML = d.invites.map(i => `<div class="invite"><div class="who"><b>${esc(i.name)}</b>
       <div class="muted small">Creado ${esc(fmtAgo(i.created))} · ${i.used ? 'entró por última vez ' + esc(fmtAgo(i.used)) : 'todavía no entra'}</div>
-      ${i.link ? `<div class="lnk">${esc(i.link)}</div>` : ''}</div>
-      <div class="row">${i.link ? `<button class="btn sm" data-rcopy="${esc(i.link)}">Copiar enlace</button>` : ''}
+      ${i.code ? `<div class="lnk">${esc(i.code)}</div>` : ''}</div>
+      <div class="row">${i.code ? `<button class="btn sm" data-rcopy="${esc(i.code)}">Copiar código</button>` : ''}
       <button class="btn sm danger" data-rdel="${esc(i.id)}" data-rname="${esc(i.name)}">Quitar acceso</button></div></div>`).join('')
     || '<div class="muted small">Nadie más administra este servidor.</div>';
-  $$('[data-rcopy]').forEach(b => b.onclick = () => copyText(b.dataset.rcopy));
+  $$('[data-rcopy]').forEach(b => b.onclick = () => { copyText(b.dataset.rcopy); });
   $$('[data-rdel]').forEach(b => b.onclick = async () => {
-    if (!(await ask(`¿Quitarle el acceso a ${b.dataset.rname}? Su enlace deja de funcionar al tiro.`, 'Quitar acceso', 'Cancelar', true))) return;
+    if (!(await ask(`¿Quitarle el acceso a ${b.dataset.rname}? Su código deja de funcionar al tiro.`, 'Quitar acceso', 'Cancelar', true))) return;
     const r = await act(() => api(`servers/${encodeURIComponent(CUR)}/remoto/${b.dataset.rdel}`, { method: 'DELETE' }), 'Acceso quitado.');
     if (r) renderRemote(r);
   });
@@ -1252,7 +1288,7 @@ $('#bRemoteNew').onclick = async () => {
   const name = $('#rName').value.trim();
   if (!name) return toast('Escribe el nombre de quien va a administrar el servidor.', true);
   const r = await act(() => api(`servers/${encodeURIComponent(CUR)}/remoto`, { method: 'POST', json: { name } }),
-    `Listo. Cuando aparezca el enlace, cópialo y pásaselo a ${name}. Quien tenga el enlace entra: no lo publiques.`);
+    `Listo. Cuando aparezca el código, cópialo y pásaselo a ${name}. Quien tenga el código entra: no lo publiques.`);
   if (r) { $('#rName').value = ''; renderRemote(r); loadRemote(); }
 };
 /* ---------------- imagen y mensaje del servidor ---------------- */

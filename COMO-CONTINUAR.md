@@ -107,18 +107,22 @@ Si le pides a Claude un cambio en otra conversación, dile que lea este archivo 
 - **Borrar:** botón «Borrar servidor» arriba, en la tarjeta del servidor (y el de siempre en Ajustes → Opciones
   avanzadas). Pide escribir el nombre. `Manager.delete()` apaga el servidor guardando el mundo si está encendido,
   quita sus accesos remotos y reintenta borrar la carpeta si Windows todavía tiene archivos tomados.
-- **Acceso remoto:** pestaña «Acceso remoto» de cada servidor. El dueño crea un enlace por persona y se lo pasa.
+- **Acceso remoto (solo entre apps):** pestaña «Acceso remoto» de cada servidor. El dueño crea un código por
+  persona (`SH1.` + base64 de `dirección|id|clave`) y se lo pasa. El amigo necesita Servidor Home: lo pega en
+  «Servidores de amigos» (inicio) y administra desde `/remoto?f=<id>` de su propia app, que habla con la del dueño
+  (`RemoteFriends`, rutas `api/amigos/...` que la app del amigo reenvía cifradas).
   - `RemoteAccess` abre una segunda puerta HTTP solo en `127.0.0.1:<puerto de la app + 15>` (8780) cuando hay al
     menos una invitación, y `Playit.ensure_admin_tunnel()` crea para ella un túnel TCP aparte en playit.gg
     (`"ports": {"type": "custom-tcp", "details": 1}`, nombre `servidor-home-admin`). Si no puede, explica cómo
     crearlo a mano.
-  - Las invitaciones están en `acceso-remoto.json` (junto a `ajustes.json`): id, clave, servidor y nombre.
-  - El enlace es `http://<dirección>/#<id>.<clave>`: lo que va después del `#` nunca sale del navegador.
-    `web/remoto.html` firma cada pedido con HMAC-SHA256 (SHA-256 escrito en JavaScript, porque por http el navegador
-    no deja usar `crypto.subtle`) sobre método, ruta, hora, un número al azar y el SHA-256 del cuerpo.
-    `RemoteAccess.verify()` rechaza firmas malas, horas con más de 2 minutos de diferencia y firmas repetidas.
-    La conexión va sin cifrar: quien espíe ve la consola, pero no puede sacar la clave ni mandar pedidos.
-  - `RemoteHandler` solo tiene rutas sobre el servidor de la invitación: estado, encender/apagar/reiniciar/forzar,
+  - La puerta solo acepta `POST /sh-remoto`; a un navegador no le responde nada. Pedido y respuesta van cifrados y
+    firmados con la clave de 256 bits del código (`remote_seal` / `remote_open`: HMAC-SHA256 en modo contador
+    para cifrar y HMAC-SHA256 para firmar, solo biblioteca estándar). Se rechazan firmas malas, mensajes
+    repetidos y horas con más de 2 minutos de diferencia (la app del amigo corrige su reloj sola con el `t` que
+    devuelve el error `hora`). Cada respuesta va atada al número de su pedido.
+  - Las invitaciones están en `acceso-remoto.json` y, en el PC del amigo, los servidores en
+    `servidores-de-amigos.json` (junto a `ajustes.json`, permisos 600 en Linux).
+  - `remote_action()` solo tiene rutas sobre el servidor de la invitación: estado, encender/apagar/reiniciar/forzar,
     consola y comandos, jugadores, ajustes del juego (`REMOTE_PROPERTIES`: sin puerto ni rcon) y crear respaldos.
     A propósito no hay mods, argumentos de Java, versiones ni borrar: con eso se podrían ejecutar programas en el
     PC del dueño. Todo lo que hace el amigo queda en la consola y en `servidor-home.log` con su nombre.

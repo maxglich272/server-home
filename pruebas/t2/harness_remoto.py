@@ -1,6 +1,6 @@
-"""Pruebas de borrar servidores y del acceso remoto (un amigo administra UN servidor desde su navegador).
+"""Pruebas de borrar servidores y del acceso remoto (un amigo administra UN servidor desde su propio Servidor Home).
 Necesita el mock encendido (mock2/mockserver.py) y el servidor falso compilado (mock2/construir_falso.sh)."""
-import os, sys, json, time, threading, urllib.request, urllib.error, shutil, hashlib, hmac, secrets
+import os, sys, json, time, threading, urllib.request, urllib.error, shutil, base64
 APP = "/home/claude/t2/app-remoto"
 shutil.rmtree(APP, ignore_errors=True)
 shutil.copytree("/home/claude/servidor-home", APP, ignore=shutil.ignore_patterns("__pycache__", "servidores", "ajustes.json"))
@@ -10,7 +10,7 @@ sys.path.insert(0, APP)
 import servidor_home as sh
 sh.MOJANG_MANIFEST = B + "/manifest.json"; sh.FABRIC_META = B + "/fabric"; sh.NEOFORGE_MAVEN = B + "/neoforge"
 sh.PLAYIT_API = B; sh.PLAYIT_DOWNLOAD = B + "/playit-dl/"
-sh.REMOTE_FILE = os.path.join(APP, "acceso-remoto.json")
+sh.REMOTE_FILE = os.path.join(APP, "acceso-remoto.json"); sh.FRIENDS_FILE = os.path.join(APP, "amigos.json")
 sh.Playit.start = lambda self: None          # sin el agente real: las pruebas llaman a refresh() a mano
 os.makedirs(sh.PLAYIT_DIR, exist_ok=True)
 open(os.path.join(sh.PLAYIT_DIR, "playit.toml"), "w").write('secret_key = "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90"\n')
@@ -18,6 +18,7 @@ sh.manager = sh.Manager()
 sh.manager.playit = sh.Playit()
 PORT = int(os.environ.get("PORT", "8767"))
 sh.manager.remote = sh.RemoteAccess(PORT + sh.REMOTE_PORT_OFFSET)
+sh.manager.friends = sh.RemoteFriends()        # la app del amigo: en la prueba es la misma, hablando con su propia puerta
 httpd = sh.ThreadingHTTPServer(("127.0.0.1", PORT), sh.Handler); sh.HTTPD = httpd
 threading.Thread(target=httpd.serve_forever, daemon=True).start()
 A = f"http://127.0.0.1:{PORT}/api/"
@@ -32,23 +33,13 @@ def call(path, method="GET", body=None):
     except urllib.error.HTTPError as e: return e.code, json.loads(e.read())
 
 
-def rcall(inv, path, method="GET", body=None, tamper=None, ts=None, raw_headers=None):
-    """Como la página remoto.html: firma cada pedido con la clave del enlace."""
-    target = "/r/api/" + path
-    data = json.dumps(body).encode() if body is not None else b""
-    ts = str(int(time.time()) if ts is None else ts)
-    nonce = secrets.token_hex(16)
-    msg = "\n".join([method, target, ts, nonce, hashlib.sha256(data).hexdigest()]).encode()
-    sig = hmac.new(bytes.fromhex(inv["key"]), msg, hashlib.sha256).hexdigest()
-    headers = {"X-SH-Id": inv["id"], "X-SH-Ts": ts, "X-SH-Nonce": nonce, "X-SH-Firma": sig, "Content-Type": "application/json"}
-    if tamper:
-        target, data = tamper(target, data)
-    if raw_headers is not None:
-        headers = raw_headers
-    req = urllib.request.Request(R + target, data=data or None, method=method, headers=headers)
+def door(env, path=None, method="POST"):
+    """Un mensaje crudo a la puerta del dueño, como lo vería alguien en el camino."""
+    data = json.dumps(env).encode() if env is not None else None
+    req = urllib.request.Request(R + (path or sh.REMOTE_PATH), data=data, method=method, headers={"Content-Type": "application/json"})
     try:
-        with urllib.request.urlopen(req, timeout=30) as r: return r.status, json.loads(r.read()), headers
-    except urllib.error.HTTPError as e: return e.code, json.loads(e.read()), headers
+        with urllib.request.urlopen(req, timeout=30) as r: return r.status, r.read()
+    except urllib.error.HTTPError as e: return e.code, e.read()
 
 
 def wait(fn, timeout=40, step=0.3):
@@ -102,72 +93,87 @@ adm = [t for t in st_mock["tunnels"] if t.get("kind") == "custom-tcp"][0]
 ok({f["name"]: f["value"] for f in adm["fields"]} == {"local_ip": "127.0.0.1", "local_port": str(PORT + sh.REMOTE_PORT_OFFSET)}, f"el túnel apunta a 127.0.0.1:{PORT + sh.REMOTE_PORT_OFFSET}")
 ok(sh.manager.playit.address() == "prueba-max.gl.joinmc.link", "la dirección de Minecraft sigue siendo la de Minecraft")
 st, r = call(f"servers/{SA}/remoto")
-link = r["invites"][0]["link"]
-ok(r["address"] == "prueba-admin.gl.at.ply.gg:31337" and link == f"http://prueba-admin.gl.at.ply.gg:31337/#{INV['id']}.{INV['key']}", f"el enlace lleva la clave después del #: {link}")
+code = r["invites"][0]["code"]
+ok(r["address"] == "prueba-admin.gl.at.ply.gg:31337" and sh.parse_remote_code(code) == ("prueba-admin.gl.at.ply.gg:31337", INV["id"], INV["key"]), f"el código lleva la dirección y la clave: {code}")
+ok(len(INV["key"]) == 64, "clave de 256 bits")
 sh.manager.playit.refresh()
 ok(len(mock_state()["tunnels"]) == 2, "no crea túneles repetidos")
 
-print("\n== La puerta remota ==")
-html = urllib.request.urlopen(R + "/").read().decode()
-ok("Acceso remoto" in html and "hmac256" in html, "sirve la página remoto.html")
-for bad in ("/api/state", "/api/servers", "/index.html/../api/state", "/r/api/../api/servers"):
-    try:
-        urllib.request.urlopen(R + bad); code = 200
-    except urllib.error.HTTPError as e:
-        code = e.code
-    ok(code in (401, 404), f"no deja usar el panel del dueño por la puerta remota ({bad} → {code})")
-st, r, _ = rcall(INV, "estado")
-ok(st == 200 and r["name"] == "Mundo de Ana" and r["admin"] == "Beto" and "path" not in r and "jvm_args" not in r, f"estado del servidor concedido, sin rutas del PC: {r}")
-st, r, _ = rcall({"id": INV["id"], "key": "00" * 16}, "estado")
-ok(st == 401, "rechaza una firma con otra clave")
-st, r, _ = rcall({"id": "abcdefabcdef", "key": INV["key"]}, "estado")
-ok(st == 401 and "ya no existe" in r["error"], "rechaza invitaciones que no existen")
-st, r, _ = rcall(INV, "estado", ts=int(time.time()) - 3600)
-ok(st == 401, "rechaza pedidos viejos (hora)")
-st, r, h = rcall(INV, "estado")
-st2, r2, _ = rcall(INV, "estado", raw_headers=h)
-ok(st == 200 and st2 == 401 and "repetido" in r2["error"], "rechaza un pedido repetido (la misma firma dos veces)")
-st, r, _ = rcall(INV, "comando", "POST", {"command": "say hola"}, tamper=lambda t, d: (t, json.dumps({"command": "op Intruso"}).encode()))
-ok(st == 401, "rechaza un cuerpo cambiado en el camino")
-st, r, _ = rcall(INV, "consola?since=0", tamper=lambda t, d: ("/r/api/jugadores", d))
-ok(st == 401, "rechaza una ruta cambiada en el camino")
+print("\n== La puerta del dueño ==")
+for path, method in (("/", "GET"), ("/index.html", "GET"), ("/api/state", "GET"), ("/r/api/estado", "GET"), ("/sh-remoto", "GET")):
+    st, raw = door(None, path, method)
+    ok(st == 404 and not raw, f"a un navegador no le responde nada ({method} {path} → {st})")
+ok(door({"hola": 1})[0] == 401 and door(None)[0] == 401, "rechaza mensajes que no son de una app")
+env = sh.remote_seal("00" * 32, b"pedido", INV["id"], {"method": "GET", "path": "estado"})
+st, raw = door(env)
+ok(st == 401 and b"Mundo" not in raw, "rechaza un mensaje cifrado con otra clave")
+env = sh.remote_seal(INV["key"], b"pedido", "abcdefabcdef", {"method": "GET", "path": "estado"})
+ok(door(env)[0] == 401, "rechaza invitaciones que no existen")
+env = sh.remote_seal(INV["key"], b"pedido", INV["id"], {"method": "POST", "path": "comando", "body": {"command": "say secreto123"}})
+wire = json.dumps(env)
+ok("secreto123" not in wire and "comando" not in wire, "el pedido viaja cifrado (no se lee el comando)")
+st, raw = door(env)
+ok(st == 200 and b"Mundo" not in raw and b"status" not in raw, "la respuesta también viaja cifrada")
+inner, _, _ = sh.remote_open(INV["key"], b"respuesta", json.loads(raw), bind=bytes.fromhex(env["nonce"]))
+ok(inner["status"] == 400 and "encendido" in inner["data"]["error"], f"la respuesta se descifra con la clave: {inner}")
+ok(door(env)[0] == 401, "rechaza un pedido repetido")
 try:
-    urllib.request.urlopen(urllib.request.Request(R + "/r/api/estado")); code = 200
-except urllib.error.HTTPError as e:
-    code = e.code
-ok(code == 401, "sin firma no entrega nada")
+    sh.remote_open(INV["key"], b"respuesta", json.loads(raw), bind=b"otro")
+    ok(False, "una respuesta no sirve para otro pedido")
+except PermissionError:
+    ok(True, "una respuesta no sirve para otro pedido")
+env = sh.remote_seal(INV["key"], b"pedido", INV["id"], {"method": "GET", "path": "estado"})
+ct = bytearray(base64.b64decode(env["ct"])); ct[3] ^= 1; env["ct"] = base64.b64encode(bytes(ct)).decode()
+ok(door(env)[0] == 401, "rechaza un mensaje cambiado en el camino")
+env = sh.remote_seal(INV["key"], b"pedido", INV["id"], {"method": "GET", "path": "estado"}, ts=time.time() - 3600)
+st, raw = door(env)
+ok(st == 401 and json.loads(raw)["error"] == "hora", "rechaza pedidos con la hora muy distinta")
+
+print("\n== La app del amigo ==")
+LOCAL = sh.remote_code(f"127.0.0.1:{PORT + sh.REMOTE_PORT_OFFSET}", INV)      # el mismo código, apuntando a esta prueba
+ok(call("amigos", "POST", {"code": "hola"})[0] == 400, "rechaza algo que no es un código")
+ok(call("amigos", "POST", {"code": LOCAL[:40]})[0] == 400, "rechaza un código cortado")
+st, r = call("amigos", "POST", {"code": "  " + LOCAL[:30] + "\n" + LOCAL[30:] + " "})
+ok(st == 201 and r["name"] == "Mundo de Ana", f"agrega el servidor del amigo con el código (aunque venga con espacios): {r}")
+FID = r["id"]
+st, lst = call("amigos")
+ok(st == 200 and len(lst) == 1 and lst[0]["admin"] == "Beto" and "key" not in lst[0], f"lo lista sin mostrar la clave: {lst}")
+ok(call("amigos", "POST", {"code": LOCAL})[0] == 201 and len(call("amigos")[1]) == 1, "agregarlo dos veces no lo repite")
+page = urllib.request.urlopen(A.replace("/api/", "/remoto")).read().decode()
+ok("Servidor de un amigo" in page and "/api/amigos/" in page, "sirve el panel del servidor del amigo en /remoto")
+st, r = call(f"amigos/{FID}/estado")
+ok(st == 200 and r["name"] == "Mundo de Ana" and r["admin"] == "Beto" and "path" not in r and "jvm_args" not in r, f"estado del servidor, sin rutas del PC: {r}")
+sh.manager.friends.offsets[INV["id"]] = -1000
+st, r = call(f"amigos/{FID}/estado")
+ok(st == 200 and abs(sh.manager.friends.offsets[INV["id"]]) < 5, "si los relojes no calzan, se corrige solo")
 
 print("\n== Lo que puede hacer el amigo (solo en su servidor) ==")
-st, r, _ = rcall(INV, "encender", "POST")
+st, r = call(f"amigos/{FID}/encender", "POST")
 ok(st == 200, f"enciende: {r}")
 status_is(SA, "en línea")
 ok(srv(SB)["status"] == "detenido", "el otro servidor no se toca")
-st, r, _ = rcall(INV, "comando", "POST", {"command": "join Alex"}); time.sleep(1)
-st, r, _ = rcall(INV, "jugadores")
-ok(st == 200 and any(p["name"] == "Alex" and p["online"] for p in r["players"]), f"ve a los jugadores: {r}")
-st, r, _ = rcall(INV, "jugadores", "POST", {"action": "op", "name": "Alex"}); time.sleep(0.8)
-st, r, _ = rcall(INV, "jugadores", "POST", {"action": "ban", "name": "Pepito", "reason": "grifeo"}); time.sleep(0.8)
-st, r, _ = rcall(INV, "jugadores")
-names = {p["name"]: p for p in r["players"]}
+call(f"amigos/{FID}/comando", "POST", {"command": "join Alex"}); time.sleep(1)
+st, r = call(f"amigos/{FID}/jugadores")
+ok(st == 200 and any(p["name"] == "Alex" and p["online"] for p in r["players"]), "ve a los jugadores")
+call(f"amigos/{FID}/jugadores", "POST", {"action": "op", "name": "Alex"}); time.sleep(0.8)
+call(f"amigos/{FID}/jugadores", "POST", {"action": "ban", "name": "Pepito", "reason": "grifeo"}); time.sleep(0.8)
+names = {p["name"]: p for p in call(f"amigos/{FID}/jugadores")[1]["players"]}
 ok(names["Alex"]["op"] and names["Pepito"]["banned"], "hace admin y banea")
-st, r, _ = rcall(INV, "consola?since=0")
-text = "\n".join(l["s"] for l in r["lines"])
-ok(st == 200 and "Beto enciende el servidor" in text and "(Beto desde el acceso remoto)" in text, "la consola muestra quién hizo qué")
-st, r, _ = rcall(INV, "propiedades")
-ok(st == 200 and "server-port" not in r and "max-players" in r, f"lee los ajustes del juego (sin el puerto): {sorted(r)}")
-st, r, _ = rcall(INV, "propiedades", "PUT", {"properties": {"max-players": "7", "motd": "Hola §aAna"}})
-props = sh.read_properties(os.path.join(sh.SERVERS_DIR, SA, "server.properties"))
-ok(st == 200 and props["max-players"] == "7", "cambia ajustes del juego")
+ok(call(f"amigos/{FID}/jugadores", "POST", {"action": "op", "name": "a b"})[0] == 400, "los errores llegan como errores")
+text = "\n".join(l["s"] for l in call(f"amigos/{FID}/consola?since=0")[1]["lines"])
+ok("Beto enciende el servidor" in text and "(Beto desde el acceso remoto)" in text, "la consola muestra quién hizo qué")
+st, r = call(f"amigos/{FID}/propiedades")
+ok(st == 200 and "server-port" not in r and "max-players" in r, "lee los ajustes del juego (sin el puerto)")
+st, r = call(f"amigos/{FID}/propiedades", "PUT", {"properties": {"max-players": "7"}})
+ok(st == 200 and sh.read_properties(os.path.join(sh.SERVERS_DIR, SA, "server.properties"))["max-players"] == "7", "cambia ajustes del juego")
 for k in ("server-port", "enable-rcon", "rcon.password", "query.port"):
-    st, r, _ = rcall(INV, "propiedades", "PUT", {"properties": {k: "1"}})
-    ok(st == 400, f"no deja cambiar {k}")
-st, r, _ = rcall(INV, "respaldos", "POST")
-ok(st == 200 and r["name"].startswith("respaldo-"), f"respalda el mundo: {r}")
+    ok(call(f"amigos/{FID}/propiedades", "PUT", {"properties": {k: "1"}})[0] == 400, f"no deja cambiar {k}")
+st, r = call(f"amigos/{FID}/respaldos", "POST")
+ok(st == 200 and r["name"].startswith("respaldo-"), "respalda el mundo")
 for path, method in (("mods", "GET"), ("borrar", "POST"), ("version", "POST"), ("ajustes", "PUT"), (f"../servers/{SB}", "GET")):
-    st, r, _ = rcall(INV, path, method, {} if method != "GET" else None)
-    ok(st in (401, 404), f"no existe «{path}» en el acceso remoto ({st})")
-st, r, _ = rcall(INV, "reiniciar", "POST")
-ok(st == 200, "reinicia")
+    st, r = call(f"amigos/{FID}/{path}", method, {} if method != "GET" else None)
+    ok(st == 404, f"no existe «{path}» en el acceso remoto ({st})")
+ok(call(f"amigos/{FID}/reiniciar", "POST")[0] == 200, "reinicia")
 time.sleep(1)
 status_is(SA, "en línea")
 
@@ -177,20 +183,25 @@ INV2 = [i for i in sh.manager.remote.invites if i["name"] == "Carla"][0]
 ok(call(f"servers/{SB}/remoto/{INV['id']}", "DELETE")[0] == 404, "no se quita un acceso desde otro servidor")
 st, r = call(f"servers/{SA}/remoto/{INV['id']}", "DELETE")
 ok(st == 200 and [i["name"] for i in r["invites"]] == ["Carla"], "quita el acceso de Beto")
-st, r, _ = rcall(INV, "estado")
-ok(st == 401 and "ya no existe" in r["error"], "el enlace de Beto deja de funcionar al tiro")
-ok(rcall(INV2, "estado")[0] == 200, "el de Carla sigue funcionando")
+st, r = call(f"amigos/{FID}/estado")
+ok(st == 401 and r.get("auth") and "ya no existe" in r["error"], f"la app de Beto deja de entrar al tiro: {r}")
+st, r = call("amigos", "POST", {"code": sh.remote_code(f"127.0.0.1:{PORT + sh.REMOTE_PORT_OFFSET}", INV2)})
+FID2 = r["id"]
+ok(call(f"amigos/{FID2}/estado")[0] == 200, "la de Carla sigue entrando")
+ok(call(f"amigos/{FID}", "DELETE")[0] == 200 and [f["id"] for f in call("amigos")[1]] == [FID2], "el amigo quita un servidor de su lista")
 
 print("\n== Borrar un servidor encendido ==")
 st, r = call(f"servers/{SA}", "DELETE")
 ok(st == 200 and not os.path.exists(os.path.join(sh.SERVERS_DIR, SA)), f"lo apaga guardando el mundo y lo borra: {r}")
 ok(SA not in [s["id"] for s in call("servers")[1]], "ya no aparece en la lista")
 ok(not any(i["server"] == SA for i in sh.manager.remote.invites), "se quitan sus accesos remotos")
-st, r, _ = rcall(INV2, "estado")
-ok(st == 401, "el enlace de su servidor deja de funcionar")
+ok(call(f"amigos/{FID2}/estado")[0] == 401, "la app de Carla ya no entra")
 st, r = call(f"servers/{SB}", "DELETE")
 ok(st == 200 and not os.path.exists(os.path.join(sh.SERVERS_DIR, SB)), "borra un servidor apagado")
 ok(call(f"servers/{SB}", "DELETE")[0] == 404, "borrar dos veces responde «no encontrado»")
+sh.manager.remote.stop()
+st2, r2 = call(f"amigos/{FID2}/estado")
+ok(st2 == 400 and "No pude conectarme" in r2["error"], f"si el PC del dueño no responde, lo dice: {r2}")
 
 sh.manager.shutdown_all()
 print(f"\n{len(FAILS)} fallas")
