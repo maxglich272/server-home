@@ -1,0 +1,178 @@
+create|Create|simibubi|create-1.21.1-6.0.10.jar
+create-aeronautics|Create Aeronautics|ryanhcode|create-aeronautics-bundled-1.21.1-1.3.2.jar
+sable|Sable|ryanhcode|sable-neoforge-1.21.1-2.0.5.jar
+create-aeroworks|Create: Aeroworks|mred231|aeroworks-1.5.0.jar
+create-propulsion-simulated|Create Propulsion: Simulated|kyivsec|createpropulsion-1.1.5.jar
+create-simulated-jet-engines-aero-propulsion|Create: Simulated Jet Engines (Aero Propulsion)|fluffy_squishy|morepropulsion-1.4.0.jar
+create-tracks|Create: Tracks|qwxon|tracks-neoforge-1.21.1-1.0.1.jar
+create-aeronautics-gadgets-and-gizmos|Create Aeronautics: Gadgets & Gizmos|Riieno|gadgets-and-gizmos-bundled-V1.2.4.jar
+create-aeronautics-transmission-linkage|Create Aeronautics: Transmission & Linkage|enxv233|create_aeronautics_transmission_linkage-0.2.8.jar
+create-aeronautics-automated-logistics|Create Aeronautics: Automated Logistics|SprocketGames|create_aeronautics_automated_logistics-0.6.2.jar
+create-aeronautics-climbable-ropes|Climbable Ropes for Create Aeronautics|saunhardy|climbable_ropes-2.1.4.jar
+create-aeronautics-throwable-rope-connector|Create Aeronautics: Throwable Rope Connector|SprocketGames|create_aeronautics_throwable_rope_connector-0.4.3.jar
+create-linear-bearing|Create: Linear Bearing|StievenNob|linearbearing-1.2.6.jar
+absolute-kinematics|Absolute Kinematics (Create Aeronautics)|RCXcrafter|absolute_kinematics-1.0.1.jar
+create-aeronautics-copycat-wing|Create Aeronautics: Copycat Wing|mumu17|CreateAeronauticsCopycatWing-1.21.1-1.0.4.jar
+copycats-aeronautics-weight|Copycats+ aeronautics weight|Mc_Orion|aerocopycats-1.1.1.jar
+create-aeronautics-covers|Create Aeronautics: Covers|Project8gbDeRam|aeronauticscovers-1.21.1-NeoForge-1.0.1.jar
+aeronautics-calibrated|Aeronautics: Calibrated|Vulpixas|Neoforge-Aeronautics-Calibrated-1.4.0.jar
+sable-physics-compat|Sable: Physics Compat|NumberOneRiker|sablephysicscompat-1.3.0.jar
+create-aeronautics-compatability|Create Aeronautics: Compatibility|rsap|aeronauticscompat-1.1.3.jar
+create-aeronautics-shield-generator-force-field|Create Aeronautics: Shield Generators|fluffy_squishy|shield_generators-1.4.0.jar
+create-aero-radars|Create Aero Radars|LowTierChud|create_aero_radar-0.1.1-1.21.1.jar
+immersive-aeronautics|Immersive Aeronautics (Immersive Portals + Create: Aeronautics)|ItsSoBread|Immersive-Aeronautics1.1.4-1.21.1-NeoForge.jar
+jade-sable-compat|Jade Sable Compat|Maks_gaming|sablejade-1.3.0.jar
+create-xaeros-map|Create - Xaero's map|pancakethepuppy|sablexaeromaps-1.21.1-1.4.0.jar
+waystones-sable|Waystones: Sable|SShakusora|waystonessable-1.0.7.jar
+create-stuff-n-additions-x-sable-aeronautics|Create Stuff 'N Additions x Sable & Aeronautics Compat|Wachipayoxx64|SableStuffAdditionsCompat v1.0.3-1.21.1.jar
+northstar-redux|Create: Northstar - Redux|Redstonneur1256_|Northstar-0.6.6+1.21.1.jar
+create-creating-space|Create: Creating Space|RealAntEngineer|creatingspace-1.21.1-1.7.22.jar
+create-big-cannons|Create Big Cannons|rbasamoyai|createbigcannons-5.11.7+mc.1.21.1.jar
+create-radars|Create: Radars|CeoOfGoogle1|create_radar-0.4.9.4-1.21.1.jar
+create-simulated-missiles-create-aeronautics|Create: Simulated Missiles|fluffy_squishy|cbcaeronauticsmissiles-0.2.0.jar
+cbcms|CBC Military Supplement|Cainiao1053|CBC-Military-Supplement-1.21.1-2.1.4.jar
+cbc-enchanced-shells-create-big-cannons|CBC Enchanced Shells|arginou57|CBCmoreshells-1.4.0.jar
+cgs|Create: Gunsmithing|Jetug|create-gunsmithing-1.21.1-1.4.9.jar
+createaddition|Create Crafts & Additions|MRHminer|createaddition-1.6.0.jar
+create-enchantment-industry|Create: Enchantment Industry|DragonsPlus|create-enchantment-industry-2.5.4.jar
+copycats|Create: Copycats+|Lysine|copycats-3.0.9+mc.1.21.1-neoforge.jar
+create-connected|Create: Connected|Lysine|create_connected-1.3.3-mc1.21.1.jar
+create-deco|Create Deco|talrey|createdeco-2.1.3.jar
+create-stuff-additions|Create Stuff 'N Additions|Furti_Two|create-stuff-additions1.21.1_v2.1.4b.jar
+create-diesel-generators|Create: Diesel Generators|George_VI|createdieselgenerators-1.21.1-1.3.15.jar
+create-new-age|Create: New Age|nullBlade|create-new-age-1.2.0+neoforge-mc1.21.1.jar
+steam-n-rails-neoforge|Steam 'n' Rails Neoforge|PoppyBlossom|railways-0.2.1+neoforge-mc1.21.1.jar
+interiors|Create: Interiors|a0ax|interiors-0.6.1 v3.jar
+create-encased|Create Encased|iglee42|Create Encased-1.21.1-1.9.0-ht3.jar
+create-bits-n-bobs|Create: Bits 'n' Bobs|az_tech|bits_n_bobs-2.3.5.jar
+create-escalated|Create: Escalated|rbasamoyai|escalated-1.3.2-mc.1.21.1.jar
+create-trading-floor|Create: Trading Floor|CakeIsTastyDeveloper|trading_floor-3.0.16.jar
+create-pattern-schematics|Create: Pattern Schematics|CakeIsTastyDeveloper|create_pattern_schematics-2.0.10.jar
+create-mechanical-extruder|Create Mechanical Extruder|oierbravo|create_mechanical_extruder-1.21.1-2.2.2-6.0.10.jar
+create-design-n-decor|Create: Design n' Decor|Luna|Design-n-Decor-1.21.1-2.2b.jar
+create-misc-and-things|Create: Misc & Things|To0pa|create_things_and_misc-4.1.1-neoforge-1.21.1.jar
+create-ore-excavation|Create Ore Excavation|tom54541|createoreexcavation-1.21-1.6.8.jar
+create-power-loader|Create: Power Loader|Lysine|create_power_loader-2.0.5-mc1.21.1.jar
+create-enchantable-machinery|Create: Enchantable Machinery|Cotrin|createenchantablemachinery-3.6.0+mc1.21.1-neoforge.jar
+create-sifting|Create Sifting|oierbravo|createsifter-1.21.1-2.3.0.jar
+create-jetpack|Create Jetpack|possible_triangle|create_jetpack-forge-5.2.1.jar
+create-central-kitchen|Create: Central Kitchen|DragonsPlus|create-central-kitchen-2.6.2.jar
+slice-and-dice|Create Slice & Dice|possible_triangle|sliceanddice-4.3.4-neoforge.jar
+create-extra-gauges|Create: Extra Gauges|LiukRast|extra_gauges-2.1.3.jar
+create-mobile-packages|Create: Mobile Packages|timplay33|create_mobile_packages-1.21.1-0.7.7.jar
+hypertubes|Create: Hypertubes|Rokzin|create_hypertube-0.6.0-NEOFORGE.jar
+create-framed|Create: Framed|DakotaPrideModding|createframed-1.21.1-1.8.2.jar
+create-cobblestone|Create Cobblestone|MrStickyPiston|createcobblestone-1.5.0+neoforge-1.21.1-153.jar
+create-transmission|Create: Transmission!|SerpensSolida|createtransmission-1.2.2+neoforge-create6-1.21.1.jar
+create-dreams-desires|Create: Dreams n' Desires|Luna|DnDesires-1.21.1-2.3a-BETA.jar
+create-ultimate-factory|Create: Ultimate Factory|robinfrt|create_ultimate_factory-2.2.4-neoforge-1.21.1.jar
+create-confectionery|Create Confectionery|Furti_Two|create-confectionery1.21.1_v1.1.3b.jar
+sophisticated-backpacks-create-integration|Sophisticated Backpacks Create Integration|P3pp3rF1y|sophisticatedbackpackscreateintegration-1.21.1-0.2.0.168.jar
+create-shimmer|Create: Shimmer|Adonis_Baffin|create-shimmer-1.3.1.jar
+tectonic|Tectonic|Apollo|tectonic-3.0.28-neoforge-21.1.jar
+terralith|Terralith|Starmute|Terralith_1.21.x_v2.6.2.jar
+ohmymeteors|OhMyMeteors|Emafire003|ohmymeteors-1.5.0+1.21+neo.jar
+volcanic-caverns|Volcanic Caverns|f1ashfyre|volcanic_caverns-1.21.1-neoforge-1.2.8.jar
+explorify|Explorify - Dungeons & Structures|bebebea_loste|Explorify v1.6.5.mod.jar
+yungs-better-dungeons-neoforge|YUNG's Better Dungeons|YUNGNICKYOUNG|YungsBetterDungeons-1.21.1-NeoForge-5.1.4.jar
+yungs-better-mineshafts-neoforge|YUNG's Better Mineshafts|YUNGNICKYOUNG|YungsBetterMineshafts-1.21.1-NeoForge-5.1.1.jar
+yungs-better-strongholds-neoforge|YUNG's Better Strongholds|YUNGNICKYOUNG|YungsBetterStrongholds-1.21.1-NeoForge-5.1.3.jar
+yungs-better-desert-temples-neoforge|YUNG's Better Desert Temples|YUNGNICKYOUNG|YungsBetterDesertTemples-1.21.1-NeoForge-4.1.5.jar
+yungs-better-jungle-temples-neoforge|YUNG's Better Jungle Temples|YUNGNICKYOUNG|YungsBetterJungleTemples-1.21.1-NeoForge-3.1.2.jar
+yungs-better-ocean-monuments-neoforge|YUNG's Better Ocean Monuments|YUNGNICKYOUNG|YungsBetterOceanMonuments-1.21.1-NeoForge-4.1.2.jar
+yungs-better-witch-huts-neoforge|YUNG's Better Witch Huts|YUNGNICKYOUNG|YungsBetterWitchHuts-1.21.1-NeoForge-4.1.1.jar
+yungs-extras-neoforge|YUNG's Extras|YUNGNICKYOUNG|YungsExtras-1.21.1-NeoForge-5.1.1.jar
+when-dungeons-arise|When Dungeons Arise|Aureljz|DungeonsArise-1.21.1-2.1.68-release.jar
+structure-layout-optimizer|Structure Layout Optimizer|telepathicgrunt|structure_layout_optimizer-neoforge-1.0.12.jar
+incendium|Incendium|Starmute|Incendium_1.21.x_v5.4.4.jar
+nether-depths-upgrade|Nether Depths Upgrade|scouter567|netherdepthsupgrade-3.3-1.21.1-NeoForge.jar
+eternal-nether|Eternal Nether|Fuzs|EternalNether-v21.1.3-1.21.1-NeoForge.jar
+yungs-better-nether-fortresses-neoforge|YUNG's Better Nether Fortresses|YUNGNICKYOUNG|YungsBetterNetherFortresses-1.21.1-NeoForge-3.1.5.jar
+mns-moogs-nether-structures|MNS - Moog's Nether Structures|finndog_123|MoogsNetherStructures-universal-1.21-3.1.1.jar
+cataclysm-x-yungs|Cataclysm x YUNG's Better Nether Fortresses Compat|GamesOfLife|cataclysmfortresses-1.21.1-NeoForge.jar
+nullscape|Nullscape|Starmute|Nullscape_1.21.x_v1.2.14.jar
+unusual-end|Unusual End|Sweetygamer|unusualend-2.3.1b.jar
+phantasm|End's Phantasm|Lyof429|phantasm-1.0.3.jar
+endremastered|End Remastered|jack_bagel|endrem-neoforge-1.21.1-6.3.0.jar
+yungs-better-end-island-neoforge|YUNG's Better End Island|YUNGNICKYOUNG|YungsBetterEndIsland-1.21.1-NeoForge-3.1.2.jar
+moogs-end-structures|MES - Moog's End Structures|finndog_123|MoogsEndStructures-universal-1.21-2.1.1.jar
+lendercataclysm|L_Ender's Cataclysm|mcl_ender|L_Ender's Cataclysm 1.21.1-3.33.jar
+mowzies-mobs|Mowzie's Mobs|bobmowzie|mowziesmobs-1.21.1-1.8.2.jar
+bosses-of-mass-destruction-forge|Bosses of Mass Destruction|Cerbon|BOMD-NeoForge-1.21-1.3.3.jar
+the-twilight-forest|The Twilight Forest|Benimatic|twilightforest-1.21.1-4.8.3345-universal.jar
+mutant-monsters|Mutant Monsters|Fuzs|MutantMonsters-v21.1.1-1.21.1-NeoForge.jar
+aquamirae|Aquamirae|Obscuria|aquamirae-neoforge-1.21.1-7.2.10.jar
+legendary-monsters|Legendary Monsters|miauczel|legendary_monsters-2.2.3 MC 1.21.1.jar
+bossesrise|Bosses'Rise - Epic Souls like boss fights|blockfactorystudio|block_factorys_bosses-2.1.2-neo-1.21.1.jar
+enhanced-boss-bars|Enhanced Boss Bars|Nakuring|enhancedbossbars-1.0.0.jar
+jei|Just Enough Items (JEI)|mezz|jei-1.21.1-neoforge-19.51.0.418.jar
+jade|Jade|Snownee|Jade-1.21.1-NeoForge-15.10.6.jar
+xaeros-minimap|Xaero's Minimap|xaero96|xaerominimap-neoforge-1.21.1-26.5.0.jar
+xaeros-world-map|Xaero's World Map|xaero96|xaeroworldmap-neoforge-1.21.1-1.46.0.jar
+appleskin|AppleSkin|squeek502|appleskin-neoforge-mc1.21-3.0.9.jar
+mouse-tweaks|Mouse Tweaks|YaLTeR|MouseTweaks-neoforge-mc1.21-2.26.1.jar
+controlling|Controlling|Jaredlll08|Controlling-neoforge-1.21.1-19.0.5.jar
+waystones|Waystones|BlayTheNinth|waystones-neoforge-1.21.1-21.1.46.jar
+sophisticated-backpacks|Sophisticated Backpacks|P3pp3rF1y|sophisticatedbackpacks-1.21.1-3.26.3.2158.jar
+corpse|Corpse|henkelmax|corpse-neoforge-1.21.1-1.1.13.jar
+farmers-delight|Farmer's Delight|vectorwing|FarmersDelight-1.21.1-1.3.4.jar
+chunky-pregenerator-forge|Chunky|pop4959|Chunky-NeoForge-1.4.23.jar
+spark|spark|lucko|spark-1.10.124-neoforge.jar
+sodium|Sodium|JellySquid|sodium-neoforge-0.8.12+mc1.21.1.jar
+reeses-sodium-options|Reese's Sodium Options|FlashyReese|reeses-sodium-options-neoforge-2.2.3+mc1.21.1.jar
+sodium-extra|Sodium Extra|FlashyReese|sodium-extra-neoforge-0.9.3+mc1.21.1.jar
+immediatelyfast|ImmediatelyFast|RaphiMC|ImmediatelyFast-NeoForge-1.6.12+1.21.1.jar
+entityculling|Entity Culling|tr7zw|entityculling-neoforge-1.10.5-mc1.21.1.jar
+moreculling|MoreCulling|FX_PR0CESS|moreculling-neoforge-1.21.1-1.0.9.jar
+dynamic-fps|Dynamic FPS|juliand665|dynamic-fps-3.11.4+minecraft-1.21.0-neoforge.jar
+badoptimizations|BadOptimizations|thosea|BadOptimizations-2.4.1-1.21.1.jar
+ferritecore|FerriteCore|malte0811|ferritecore-7.0.3-neoforge.jar
+modernfix|ModernFix|embeddedt|modernfix-neoforge-5.27.24+mc1.21.1.jar
+lithium|Lithium|JellySquid|lithium-neoforge-0.15.4+mc1.21.1.jar
+clumps|Clumps|Jaredlll08|Clumps-neoforge-1.21.1-19.0.0.1.jar
+fastsuite|FastSuite|Shadows_of_Fire|FastSuite-1.21.1-6.0.7.jar
+fastworkbench|FastWorkbench|Shadows_of_Fire|FastWorkbench-1.21.1-9.1.3.jar
+fastfurnace|FastFurnace|Shadows_of_Fire|FastFurnace-1.21.1-9.0.1.jar
+alltheleaks|AllTheLeaks (Memory Leak Fix)|Uncandango|alltheleaks-1.1.13+1.21.1-neoforge.jar
+ai-improvements|AI Improvements|QueenOfMissiles|AI-Improvements-1.21-0.5.3.jar
+smooth-chunk-save|Smooth Chunk Save|someaddon|smoothchunk-1.21-4.1.jar
+moonstone-meteorites|Moonstone Meteorites|_lemuron|moonstone_meteorites_v1.0.0_1.21-1.21.8.jar
+natures-compass|Nature's Compass|Chaosyr|NaturesCompass-1.21.1-3.4.0-neoforge.jar
+explorers-compass|Explorer's Compass|Chaosyr|ExplorersCompass-1.21.1-3.4.0-neoforge.jar
+lootr|Lootr|Noobanidus|lootr-neoforge-1.21.1-1.11.38.127.jar
+polymorph|Polymorph|TheIllusiveC4|polymorph-neoforge-1.1.0+1.21.1.jar
+create-aeronautics-x-curios-api-compat|Create Aeronautics x Curios API Compat|titammods|createaeronauticscurios-neoforge-1.21.1-2.2.jar
+bellsandwhistles|Create: Bells & Whistles|a0ax|bellsandwhistles-0.4.7-1.21.1.jar
+create-vibrant-vaults|Create: Vibrant Vaults|ZLT|create_vibrant_vaults-0.3.2.jar
+playeranimator|playerAnimator|KosmX|player-animation-lib-forge-2.0.4+1.21.1.jar
+cable-facades|Cable Facades|thepigcat76|cable_facades-1.21.1-NeoForge-2.1.4.jar
+cloth-config|Cloth Config API|shedaniel|cloth-config-15.0.140-neoforge.jar
+geckolib|GeckoLib|Gecko|geckolib-neoforge-1.21.1-4.9.3.jar
+ritchies-projectile-library|Ritchie's Projectile Library|rbasamoyai|ritchiesprojectilelib-2.1.2-mc.1.21.1-neoforge.jar
+nukateams-gun-lib|NukaTeam's Gun Lib|Jetug|ntgl-1.21.1-3.2.0.jar
+create-dragons-plus|Create: Dragons Plus|DragonsPlus|CreateDragonsPlus-1.11.9.jar
+azimuth-api|Azimuth API|CakeIsTastyDeveloper|azimuth-1.4.9.jar
+strut-your-stuff|Strut Your Stuff (Struts)|CakeIsTastyDeveloper|struts-1.3.1.jar
+mechanicals-lib|Mechanicals Lib|oierbravo|mechanicals-1.21.1-1.1.6.jar
+kotlin-for-forge|Kotlin for Forge|thedarkcolour|kotlinforforge-5.12.0-all.jar
+deployer|Create: Deployer API|LiukRast|deployer-0.1.3.jar
+architectury-api|Architectury API|shedaniel|architectury-13.0.11-neoforge.jar
+sophisticated-core|Sophisticated Core|P3pp3rF1y|sophisticatedcore-1.21.1-1.5.1.2341.jar
+lithostitched|Lithostitched|Apollo|lithostitched-1.8.0-neoforge-21.1.jar
+fzzy-config|Fzzy Config|fzzyhmstrs|fzzy_config-0.7.7+1.21+neoforge.jar
+yungs-api-neoforge|YUNG's API|YUNGNICKYOUNG|YungsApi-1.21.1-NeoForge-5.1.9.jar
+resourceful-config|Resourceful Config|ThatGravyBoat|resourcefulconfig-neoforge-1.21-3.0.11.jar
+puzzles-lib|Puzzles Lib|Fuzs|PuzzlesLib-v21.1.60-mc1.21.1-NeoForge.jar
+moogs-structure-lib|Moog's Structure Lib|finndog_123|MoogsStructureLib-neoforge-1.21.1-3.3.1.jar
+blueprint|Blueprint|TeamAbnormals|blueprint-1.21.1-8.2.0.jar
+curios|Curios API|TheIllusiveC4|curios-neoforge-9.5.1+1.21.1.jar
+lionfish-api|Lionfish API|mcl_ender|lionfishapi-3.1.jar
+cerbons-api|CERBON's API|Cerbon|CerbonsAPI-NeoForge-1.21-1.3.0.jar
+fragmentum-neoforge|Fragmentum|Obscuria|fragmentum-5.0.0+1.21.1-neoforge.jar
+searchables|Searchables|Jaredlll08|Searchables-neoforge-1.21.1-1.0.2.jar
+balm|Balm|BlayTheNinth|balm-neoforge-1.21.1-21.0.66.jar
+placebo|Placebo|Shadows_of_Fire|Placebo-1.21.1-9.9.2.jar
+cupboard|Cupboard|someaddon|cupboard-1.21.1-4.2.jar
+tfmg-community-edition|Create: TFMG Community Edition|PouffyDev|tfmg-1.21.1-1.3.1-community.jar
+deeperdarker|Deeper and Darker|KyaniteMods|deeperdarker-neoforge-1.21.1-1.4.1.jar
+the-undergarden|The Undergarden|Quek04|The_Undergarden-1.21.1-0.9.6.jar

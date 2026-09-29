@@ -1,0 +1,21 @@
+const { chromium } = require('/home/claude/mock/node_modules/playwright');
+(async () => {
+  const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+  const p = await b.newPage({ viewport: { width: 1180, height: 860 } });
+  await p.goto('http://127.0.0.1:8765/'); await p.waitForTimeout(1500);
+  await p.click('#btnAdd'); await p.click('#seg button[data-s=plain]'); await p.waitForTimeout(1500);
+  await p.screenshot({ path: 'vs1.png' });
+  await p.click('#nPick .vp-input'); await p.fill('#nPick .vp-input', '1.2'); await p.waitForTimeout(300);
+  await p.screenshot({ path: 'vs2.png' });
+  await p.evaluate(() => closeWizard());
+  const servers = await p.evaluate(() => fetch('/api/state').then(r => r.json()).then(d => d.servers));
+  const F = servers.find(s => s.type === 'fabric' && !s.modpack).id;
+  await p.selectOption('#serverPick', F); await p.waitForTimeout(800);
+  await p.click('.tab[data-t=settings]'); await p.waitForTimeout(1500);
+  await p.click('#sPick .vp-chip[data-v="1.21.1"]'); await p.waitForTimeout(1200);
+  await p.evaluate(() => document.querySelector('#verCard').scrollIntoView());
+  await p.screenshot({ path: 'vs3.png' });
+  await p.evaluate(() => window.scrollTo(0, 0)); await p.waitForTimeout(300);
+  await p.screenshot({ path: 'vs4.png' });
+  await b.close();
+})();

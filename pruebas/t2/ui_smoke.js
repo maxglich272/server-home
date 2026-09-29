@@ -1,0 +1,74 @@
+const { chromium } = require('/home/claude/mock/node_modules/playwright');
+const results = []; const ok = (c, m) => { results.push((c ? 'OK   ' : 'FAIL ') + m); };
+(async () => {
+  const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+  const p = await b.newPage({ viewport: { width: 1200, height: 900 } });
+  const errors = []; p.on('pageerror', e => errors.push(e.message)); p.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+  p.on('dialog', d => d.accept());
+  await p.goto('http://127.0.0.1:8765/'); await p.waitForTimeout(1500);
+  ok(await p.isVisible('#srvGrid .srv[data-srv]') && !(await p.isVisible('#view')), 'al abrir muestra la lista de servidores para elegir');
+  await p.click('#srvGrid .srv[data-srv]'); await p.waitForTimeout(800);
+  ok(await p.isVisible('#power') && await p.isVisible('#restart'), 'botón de encendido y de reiniciar visibles');
+  await p.click('#btnHome'); await p.waitForTimeout(600);
+  ok(await p.isVisible('#srvGrid') && !(await p.isVisible('#view')), '«Mis servidores» vuelve a la lista');
+  const ph = await p.evaluate(() => { document.querySelector('#btnAdd').click(); document.querySelector('#seg button[data-s=launcher]').click(); return document.querySelector('#pathIn').placeholder; });
+  ok(process.env.EXPECT_OS !== 'windows' || ph.includes('\\curseforge\\'), 'ejemplo de ruta según el sistema: ' + ph);
+  await p.click('#srcFoot .btn');
+  ok((await p.textContent('#playitBox')).includes('joinmc.link'), 'dirección de playit visible');
+  await p.evaluate(id => selectServer(id), 'taller-de-max'); await p.waitForTimeout(1000);
+  await p.click('.tab[data-t=addons]'); await p.waitForTimeout(700);
+  ok((await p.$$('#addonList tr')).length === 9, 'pestaña Mods lista 9 archivos');
+  await p.fill('#addonFilter', 'oculus'); await p.waitForTimeout(200);
+  ok((await p.$$('#addonList tr')).length === 1, 'buscador de mods filtra');
+  await p.click('.tab[data-t=settings]'); await p.waitForTimeout(700);
+  ok((await p.inputValue('#sName')) === 'Taller de Max', 'Ajustes carga el nombre');
+  await p.click('.tab[data-t=backups]'); await p.waitForTimeout(500);
+  await p.click('#bBackup'); await p.waitForTimeout(9000);
+  ok((await p.textContent('#backupList')).includes('respaldo-'), 'crea un respaldo desde la interfaz');
+  await p.click('.tab[data-t=console]');
+  await p.fill('#cmd', 'say hola desde la prueba'); await p.press('#cmd', 'Enter'); await p.waitForTimeout(3000);
+  ok((await p.textContent('#console')).includes('[Server] hola desde la prueba'), 'la consola envía comandos');
+  // asistente
+  await p.click('#btnAdd'); await p.click('#seg button[data-s=launcher]'); await p.waitForTimeout(1200);
+  ok((await p.$$('[data-inst]')).length === 2, 'encuentra 2 modpacks instalados');
+  const insts = await p.$$eval('.inst', els => els.map(e => e.textContent));
+  const idx = insts.findIndex(t => t.includes('Taller de Max'));
+  await p.click(`[data-inst="${idx}"]`); await p.waitForSelector('#wConfirm:not(.hide)', { timeout: 30000 });
+  ok((await p.textContent('#cDetected')).includes('NeoForge 21.1.77'), 'pantalla de confirmación muestra lo detectado');
+  ok((await p.$$('[data-co]')).length === 4, 'lista 4 mods solo-cliente para desactivar');
+  await p.waitForFunction(() => document.querySelector('#cPick .vp-input')?.value === '1.21.1', null, { timeout: 10000 });
+  ok(await p.inputValue('#eType') === 'neoforge' && await p.isVisible('#cPick .vp-input'), 'se puede cambiar loader/versión (viene 1.21.1 detectada)');
+  await p.click('#bCancelImport'); await p.waitForTimeout(500);
+  await p.click('#btnAdd'); await p.click('#seg button[data-s=plain]'); await p.waitForTimeout(1200);
+  await p.waitForFunction(() => document.querySelector('#nPick .vp-input')?.value, null, { timeout: 10000 });
+  ok((await p.$$('#nPick .vp-chip')).length >= 2, 'modo sin mods carga versiones');
+  await p.click('#wizard .foot .btn:not(.primary)'); await p.waitForTimeout(300);
+  // playit
+  await p.click('#playitBox details summary'); await p.waitForTimeout(300);
+  await p.click('#bPlayitUnlink'); await p.click('.modal [data-a="1"]'); await p.waitForTimeout(2500);
+  ok(await p.isVisible('#bPlayit'), 'desvincular muestra el botón de conectar');
+  await p.click('#bPlayit'); await p.waitForTimeout(800);
+  const href = await p.getAttribute('#playitBox a.btn.primary', 'href');
+  ok(href && href.startsWith('https://playit.gg/claim/'), 'muestra el enlace para aprobar en playit.gg');
+  await p.waitForFunction(() => document.querySelector('#playitBox').textContent.includes('joinmc.link'), null, { timeout: 30000 });
+  ok(true, 'tras aprobar, aparece la dirección fija');
+  // móvil
+  const m = await b.newPage({ viewport: { width: 390, height: 844 } }); m.on('pageerror', e => errors.push(e.message));
+  await m.goto('http://127.0.0.1:8765/'); await m.waitForTimeout(1200);
+  const overflowHome = await m.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+  ok(!overflowHome, 'sin desborde horizontal en celular (inicio)');
+  await m.click('#srvGrid .srv[data-srv]'); await m.waitForTimeout(900);
+  const overflow = await m.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+  ok(!overflow, 'sin desborde horizontal en celular');
+  // salir
+  const q = await b.newPage({ viewport: { width: 1200, height: 700 } }); q.on('pageerror', e => errors.push(e.message));
+  await q.goto('http://127.0.0.1:8765/'); await q.waitForTimeout(1200);
+  await p.click('#btnQuit'); await p.click('.modal [data-a="1"]'); await p.waitForTimeout(2500);
+  require('child_process').execSync(process.env.KILLCMD || 'kill -9 $(cat /tmp/harness.pid)');   // como cerrar la ventana de golpe
+  await q.waitForTimeout(8000);
+  ok(await q.isVisible('#offline'), 'otra pestaña avisa que la app se cerró');
+  ok((await p.textContent('body')).includes('se cerró'), 'botón Salir cierra la app');
+  ok(errors.length === 0, 'sin errores de JavaScript' + (errors.length ? ': ' + errors.join(' | ') : ''));
+  await b.close();
+  console.log(results.join('\n'));
+})();

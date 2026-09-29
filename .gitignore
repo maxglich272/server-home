@@ -1,0 +1,44 @@
+# --- Secretos: nunca al repositorio ---
+clave-de-firma/
+clave-privada*.json
+*NO-SUBIR*
+build/claves-prueba/
+*.pem
+*.key
+*.pfx
+*.p12
+.env
+.env.*
+ajustes.json
+
+# --- Python para Windows que va dentro del instalador (se baja aparte) ---
+build/app/
+
+# --- Lo que se compila o se genera ---
+build/publicar/
+publicar/
+*.exe
+*.jar
+*.class
+*.pyd
+*.dll
+gpumod/build/
+modpack-volcanes-y-estrellas/out/
+*.mrpack
+*.zip
+__pycache__/
+*.pyc
+node_modules/
+venv/
+.venv/
+
+# --- Servidores y mundos de prueba ---
+servidores/
+modpacks/
+mods-extra/
+compartir/
+pruebas/realtest/
+*.log
+logs/
+crash-reports/
+world/

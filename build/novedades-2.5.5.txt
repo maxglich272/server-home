@@ -1,0 +1,7 @@
+Al abrir la app eliges tu servidor en una pantalla con todos ellos (estado, versión y jugadores conectados).
+Botón para reiniciar el servidor, en la esquina recortada del botón de encender.
+Nuevo diseño: tarjetas, pestañas y botones más cuidados.
+Buscador de modpacks: busca en Modrinth (y en CurseForge, con tu clave de su API) y crea el servidor con un clic, con el pack de servidor si lo tiene.
+Con la clave de CurseForge también se pueden importar los .zip de CurseForge que solo traen la lista de mods.
+Pestaña Jugadores: quién está conectado, cuándo se vio a cada uno, y botones para hacer admin, expulsar, banear (con motivo) y la lista blanca (también con el servidor apagado).
+Si un mod falla al inyectar su código (como CBC Neo Warfare con Immersive Aeronautics, que botaba el servidor al segundo de encender), la app ahora culpa al mod correcto en vez de al vigilante o a ModernFix, y lo desactiva.

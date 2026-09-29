@@ -1,0 +1,1784 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Servidor Home</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%235a8f29'/%3E%3Crect y='5' width='16' height='11' fill='%23795533'/%3E%3Crect y='5' width='16' height='2' fill='%236aa531'/%3E%3Crect x='2' y='9' width='2' height='2' fill='%23634329'/%3E%3Crect x='9' y='11' width='2' height='2' fill='%23634329'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#0f1114; --panel:#181b20; --panel2:#20242b; --panel3:#262b33; --line:#2c3139; --text:#eceef1; --muted:#98a0ab;
+  --green:#72c94f; --green-d:#4a9630; --red:#ef5b52; --red-d:#b8403a; --amber:#e8b64a; --blue:#63adff;
+  --radius:16px; --mono:ui-monospace,"JetBrains Mono","Cascadia Code",Menlo,Consolas,monospace;
+  --shadow:0 1px 0 rgba(255,255,255,.03) inset,0 10px 30px rgba(0,0,0,.28);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:radial-gradient(1200px 600px at 12% -10%,rgba(114,201,79,.09),transparent 60%),radial-gradient(900px 500px at 105% 0%,rgba(99,173,255,.07),transparent 55%),var(--bg);background-attachment:fixed;color:var(--text);font:15px/1.5 "Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,Roboto,Ubuntu,sans-serif;min-height:100vh}
+button,input,select,textarea{font:inherit;color:inherit}
+a{color:var(--blue)}
+.wrap{max-width:1040px;margin:0 auto;padding:0 18px 60px}
+header{display:flex;align-items:center;gap:12px;padding:16px 18px;max-width:1040px;margin:0 auto}
+header h1{font-size:18px;margin:0;font-weight:750;letter-spacing:.2px}
+header h1 small{display:block;font-size:12px;font-weight:500;color:var(--muted);letter-spacing:0}
+.btn.back{display:none}
+body.in-server .btn.back{display:inline-flex}
+header .sp{flex:1}
+.logo{width:34px;height:34px;image-rendering:pixelated;flex:none;border-radius:8px;box-shadow:0 4px 14px rgba(90,143,41,.35)}
+.btn{border:1px solid var(--line);background:var(--panel2);padding:9px 16px;border-radius:11px;transition:border-color .15s,background .15s,transform .1s;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:7px;white-space:nowrap;text-decoration:none;color:var(--text)}
+.btn:hover{border-color:#4a525e}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.primary{background:linear-gradient(180deg,#58a93a,var(--green-d));border-color:#5aa83c;color:#fff;font-weight:650;box-shadow:0 4px 14px rgba(74,150,48,.25)}
+.btn:active:not(:disabled){transform:translateY(1px)}
+.btn.primary:hover:not(:disabled){background:var(--green)}
+.btn.danger{color:var(--red)}
+.btn.danger.fill{background:var(--red-d);border-color:var(--red-d);color:#fff}
+.btn.sm{padding:5px 11px;font-size:13.5px;border-radius:8px}
+.btn.big{padding:13px 22px;font-size:16px}
+.link{background:none;border:0;color:var(--blue);cursor:pointer;padding:0;text-decoration:underline}
+select.pick{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 10px;max-width:260px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:20px;margin-bottom:14px;box-shadow:var(--shadow)}
+.card h3{margin:0 0 10px;font-size:16px}
+.muted{color:var(--muted)}
+.small{font-size:13.5px}
+.hide{display:none!important}
+/* bienvenida */
+.welcome{text-align:center;padding:9vh 10px 20px}
+.welcome h2{font-size:28px;margin:18px 0 8px}
+.welcome p{color:var(--muted);max-width:560px;margin:0 auto 22px}
+/* héroe */
+.hero{display:flex;gap:30px;align-items:center;flex-wrap:wrap;padding:6px 18px 12px 4px}
+.hero .info{flex:1;min-width:240px}
+.hero h2{margin:0;font-size:28px;line-height:1.2;letter-spacing:-.2px}
+.hero .sub{color:var(--muted);margin-top:4px}
+.status{margin-top:12px;font-size:15.5px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.dot{width:11px;height:11px;border-radius:50%;background:#5a626e;flex:none}
+.dot.on{background:var(--green);box-shadow:0 0 8px var(--green)}
+.dot.busy{background:var(--amber);animation:pulse 1s infinite}
+.dot.err{background:var(--red)}
+@keyframes pulse{50%{opacity:.3}}
+.powerbox{position:relative;width:156px;height:156px;flex:none}
+.power{width:100%;height:100%;border-radius:30px;border:0;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;font-weight:750;font-size:15.5px;letter-spacing:.3px;color:#fff;
+  background:linear-gradient(145deg,#6cc04a,#3f8a27);box-shadow:0 10px 30px rgba(74,150,48,.35);transition:transform .12s,filter .2s;
+  -webkit-mask:radial-gradient(circle at calc(100% - 20px) calc(100% - 20px),transparent 41px,#000 42px);mask:radial-gradient(circle at calc(100% - 20px) calc(100% - 20px),transparent 41px,#000 42px)}
+.power:hover:not(:disabled){transform:scale(1.02);filter:brightness(1.06)}
+.power:disabled{opacity:.55;cursor:not-allowed}
+.power svg{width:44px;height:44px;margin-top:-10px}
+.power.off{background:linear-gradient(145deg,#ef5b52,#a8352f);box-shadow:0 10px 30px rgba(184,64,58,.32)}
+.power.wait{background:linear-gradient(145deg,#6b5822,#4a3d18);box-shadow:none}
+.restart{position:absolute;right:-12px;bottom:-12px;width:64px;height:64px;border-radius:50%;border:1px solid var(--line);cursor:pointer;display:flex;align-items:center;justify-content:center;
+  background:var(--panel3);color:var(--text);box-shadow:0 6px 18px rgba(0,0,0,.35);transition:transform .15s,background .15s,color .15s}
+.restart svg{width:28px;height:28px}
+.restart:hover:not(:disabled){background:#2f3540;color:var(--amber);transform:rotate(-35deg)}
+.restart:disabled{opacity:.4;cursor:not-allowed}
+.restart.spin svg{animation:spin 1s linear infinite}
+.powerlbl{position:absolute;right:-12px;bottom:-32px;width:64px;text-align:center;font-size:11.5px;color:var(--muted)}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.chip{background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:2px 10px 2px 4px;font-size:13px;display:inline-flex;align-items:center;gap:6px}
+.chip img{width:18px;height:18px;border-radius:4px;image-rendering:pixelated}
+.hint{margin-top:14px;background:#2b1d1c;border:1px solid #5f2724;border-radius:10px;padding:12px 14px;white-space:pre-wrap}
+.hint .row{margin-top:10px}
+.warnbox{background:#2a2414;border:1px solid #5c4b1d;border-radius:10px;padding:10px 14px;margin-top:12px;font-size:14px}
+/* dirección */
+.addr-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:12px 0;border-top:1px solid var(--line)}
+.addr-row:first-of-type{border-top:0;padding-top:4px}
+.addr-row .lbl{width:170px;color:var(--muted);font-size:14px;flex:none}
+.addr-row .val{flex:1;min-width:200px}
+.address{font:600 20px/1.3 var(--mono);word-break:break-all}
+.address.big{font-size:23px;color:var(--green)}
+.steps{margin:6px 0 0;padding-left:20px}
+.steps li{margin:4px 0}
+.spinner{width:15px;height:15px;border:2px solid var(--line);border-top-color:var(--amber);border-radius:50%;animation:spin .8s linear infinite;display:inline-block;vertical-align:-2px}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* pestañas */
+.tabs{display:flex;gap:6px;margin:22px 0 14px;overflow-x:auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:5px}
+.tab{padding:8px 16px;cursor:pointer;color:var(--muted);border-radius:10px;white-space:nowrap;font-weight:550;transition:background .15s,color .15s}
+.tab:hover{color:var(--text)}
+.tab.act{color:var(--text);background:var(--panel3);box-shadow:0 1px 0 rgba(255,255,255,.04) inset}
+.console{background:#0c0e11;border:1px solid var(--line);border-radius:12px;height:46vh;min-height:240px;overflow:auto;padding:10px 12px;font:12.5px/1.5 var(--mono);white-space:pre-wrap;word-break:break-word}
+.console .k-app{color:var(--blue)} .console .k-err{color:var(--red)} .console .k-cmd{color:var(--amber)}
+.console .k-warn{color:#d9b35a} .console .t{color:#555d68;margin-right:8px}
+.console.mini{height:200px;min-height:0;margin-top:10px}
+.cmdline{display:flex;gap:8px;margin-top:8px}
+.cmdline input{flex:1;font-family:var(--mono)}
+input[type=text],input[type=number],input[type=search],select,textarea{background:#0e1013;border:1px solid var(--line);border-radius:9px;padding:9px 11px;outline:none;width:100%}
+input:focus,select:focus,textarea:focus{border-color:var(--green-d)}
+label.f,div.f{display:flex;flex-direction:column;gap:5px;font-size:13.5px;color:var(--muted)}
+label.f > span,div.f > span{color:var(--text);font-weight:550}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+.check{display:flex;gap:10px;align-items:flex-start;cursor:pointer}
+.check input{margin-top:4px;accent-color:var(--green-d);width:16px;height:16px;flex:none}
+.check small{display:block;color:var(--muted)}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.foot{display:flex;justify-content:flex-end;gap:10px;margin-top:18px;flex-wrap:wrap}
+table{width:100%;border-collapse:collapse}
+td,th{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;font-size:14px}
+th{color:var(--muted);font-weight:500;font-size:13px}
+td input{padding:5px 8px}
+.drop{border:2px dashed var(--line);border-radius:12px;padding:26px 16px;text-align:center;color:var(--muted);transition:border-color .15s}
+.drop.over{border-color:var(--green);color:var(--text)}
+.range{display:flex;gap:12px;align-items:center}
+.range input[type=range]{flex:1;accent-color:var(--green-d)}
+.range output{min-width:74px;text-align:right;font-weight:650;color:var(--text)}
+details summary{cursor:pointer;color:var(--muted);margin:6px 0}
+/* modal */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.62);display:none;align-items:flex-start;justify-content:center;overflow:auto;padding:5vh 12px;z-index:10}
+.modal-bg.open{display:flex}
+.modal{background:var(--panel);border:1px solid var(--line);border-radius:16px;width:min(760px,100%);padding:24px 26px}
+.modal h2{margin:0 0 4px;font-size:22px}
+.seg{display:flex;background:var(--panel2);border:1px solid var(--line);border-radius:11px;padding:4px;gap:4px;margin:16px 0}
+.seg button{flex:1;border:0;background:none;padding:9px 8px;border-radius:8px;cursor:pointer;color:var(--muted);font-weight:550}
+.seg button.act{background:var(--panel);color:var(--text);box-shadow:0 1px 0 var(--line)}
+.inst{display:flex;align-items:center;gap:12px;padding:11px 12px;border:1px solid var(--line);border-radius:11px;margin-bottom:8px;background:var(--panel2)}
+.inst .n{font-weight:600}
+.inst .m{color:var(--muted);font-size:13px}
+.inst .grow{flex:1;min-width:0}
+.tag{font-size:11.5px;padding:1px 7px;border-radius:6px;background:#2a3140;color:#9fb6d9;margin-right:6px}
+.bar{height:8px;background:var(--panel2);border-radius:99px;overflow:hidden;margin:14px 0 8px}
+.bar > div{height:100%;background:var(--green-d);width:0;transition:width .3s}
+.bar.indet > div{width:35%;animation:indet 1.2s ease-in-out infinite}
+@keyframes indet{0%{margin-left:-35%}100%{margin-left:100%}}
+.detect{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin:14px 0}
+.detect .big{font-size:18px;font-weight:650}
+.clist{max-height:190px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:6px 10px;margin-top:8px}
+.clist .check{padding:5px 0;font-size:14px}
+.types{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin:6px 0 14px}
+.type{border:1px solid var(--line);border-radius:11px;padding:10px 12px;cursor:pointer;background:var(--panel2)}
+.type b{display:block}
+.type small{color:var(--muted);font-size:12.5px}
+.type.sel{border-color:var(--green-d);box-shadow:0 0 0 1px var(--green-d) inset}
+/* selector de versión */
+.vp-box{position:relative}
+.vp-box input{padding-right:40px;font-weight:600;font-size:15.5px}
+.vp-open{position:absolute;right:4px;top:50%;transform:translateY(-50%);border:0;background:none;color:var(--muted);cursor:pointer;padding:6px 10px;font-size:13px}
+.vp-list{position:absolute;left:0;right:0;top:calc(100% + 4px);background:var(--panel2);border:1px solid var(--line);border-radius:10px;max-height:264px;overflow:auto;z-index:15;box-shadow:0 12px 32px rgba(0,0,0,.5);padding:4px}
+.vp-item{display:flex;justify-content:space-between;gap:12px;padding:7px 10px;border-radius:7px;cursor:pointer;font-size:14.5px;color:var(--text)}
+.vp-item.hl{background:#2e3542}
+.vp-item.sel{color:var(--green);font-weight:600}
+.vp-item .vp-tag{color:var(--muted);font-size:12.5px;font-weight:400}
+.vp-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px}
+.vp-chip{border:1px solid var(--line);background:var(--panel2);border-radius:999px;padding:3px 11px;font-size:13px;cursor:pointer;color:var(--text)}
+.vp-chip:hover{border-color:#4a525e}
+.vp-chip.act{border-color:var(--green-d);color:var(--green)}
+.vp-msg{font-size:13px;margin-top:8px;min-height:1em}
+.vp-msg.err{color:var(--red)}
+/* barra de carga y arreglos */
+.prog{margin-top:16px;background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.prog-top{display:flex;justify-content:space-between;gap:12px;align-items:baseline}
+.prog-top b{font-weight:650}
+.prog-top span{font-weight:700;color:var(--green);font-variant-numeric:tabular-nums;font-size:17px}
+.prog .bar{margin:9px 0 7px;height:10px}
+.prog .bar > div{background:linear-gradient(90deg,var(--green-d),var(--green))}
+.prog.fixing .prog-top span{color:var(--amber)}
+.prog.fixing .bar > div{background:var(--amber)}
+.fixed{margin-top:14px;background:#15241a;border:1px solid #2c5a2c;border-radius:10px;padding:12px 14px}
+.fixed ul{margin:6px 0 10px;padding-left:20px}
+.fixed li{margin:3px 0}
+.vlink{background:none;border:0;color:var(--blue);cursor:pointer;padding:0 0 0 6px;font-size:13.5px;text-decoration:underline}
+/* actualizaciones */
+.upd{background:#14202f;border:1px solid #274a70;border-radius:12px;padding:12px 14px;margin:0 0 14px}
+.upd.ok{background:#15241a;border-color:#2c5a2c}
+.upd.err{background:#2b1d1c;border-color:#5f2724}
+.upd ul{margin:6px 0 4px;padding-left:20px}
+.upd li{margin:2px 0}
+.upd .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px}
+.appfoot{max-width:960px;margin:0 auto;padding:0 18px 26px;color:var(--muted);font-size:13px;display:flex;gap:8px 16px;flex-wrap:wrap;align-items:center;justify-content:center}
+.appfoot label{display:inline-flex;gap:6px;align-items:center;cursor:pointer}
+.updating{position:fixed;inset:0;background:rgba(10,12,14,.9);display:flex;align-items:center;justify-content:center;z-index:100;text-align:center;padding:20px}
+.updating h2{font-size:21px;margin:16px 0 6px}
+/* imagen del servidor y cómo se ve en la lista de servidores de Minecraft */
+.namerow{display:flex;align-items:center;gap:12px}
+.sicon{width:60px;height:60px;border-radius:12px;image-rendering:pixelated;flex:none;border:1px solid var(--line);background:#0c0e11}
+.mcentry{display:flex;gap:10px;align-items:flex-start;background:#0b0c0d;border:2px solid #7a7a7a;border-radius:4px;padding:6px;max-width:560px;cursor:pointer}
+.mcentry.over{border-color:var(--green)}
+.mcicon{width:64px;height:64px;flex:none;image-rendering:pixelated;background:#1a1d21}
+.mcicon img,.mcicon svg{width:64px;height:64px;display:block;image-rendering:pixelated}
+.mctext{flex:1;min-width:0;font:15px/1.3 var(--mono)}
+.mcrow{display:flex;justify-content:space-between;gap:10px}
+.mcname{color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mcplayers{color:#aaa;white-space:nowrap;display:flex;gap:6px;align-items:center}
+.mcmotd{color:#aaa;white-space:pre;overflow:hidden;margin-top:2px;min-height:2.6em}
+.mcmotd .b{font-weight:800}.mcmotd .i{font-style:italic}.mcmotd .u{text-decoration:underline}.mcmotd .s{text-decoration:line-through}
+.mccolors{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-top:10px}
+.mccolors button{width:24px;height:24px;border-radius:5px;border:1px solid var(--line);cursor:pointer;padding:0}
+.mccolors button.t{width:auto;padding:0 9px;background:var(--panel2);color:var(--text);font-size:13px}
+.toast{position:fixed;right:18px;bottom:18px;background:var(--panel2);border:1px solid var(--line);border-left:4px solid var(--green);padding:11px 15px;border-radius:9px;max-width:440px;z-index:20;box-shadow:0 8px 24px rgba(0,0,0,.45);white-space:pre-wrap}
+.toast.err{border-left-color:var(--red)}
+/* pantalla de inicio: tus servidores */
+.home-title{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:10px 0 16px}
+.home-title h2{margin:0;font-size:26px;letter-spacing:-.2px}
+.srv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px}
+.srv{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:16px;cursor:pointer;box-shadow:var(--shadow);transition:transform .15s,border-color .15s,box-shadow .15s;display:flex;flex-direction:column;gap:12px;min-height:150px;text-align:left;color:var(--text);font:inherit}
+.srv:hover{transform:translateY(-2px);border-color:#3b424d;box-shadow:0 16px 36px rgba(0,0,0,.35)}
+.srv.on{border-color:#2f5a27}
+.srv-top{display:flex;gap:12px;align-items:center}
+.srv-ico{width:52px;height:52px;border-radius:12px;flex:none;image-rendering:pixelated;background:#0c0e11;border:1px solid var(--line);overflow:hidden}
+.srv-ico img,.srv-ico svg{width:100%;height:100%;display:block;image-rendering:pixelated}
+.srv-name{font-weight:700;font-size:16.5px;line-height:1.25;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.srv-sub{color:var(--muted);font-size:13px;margin-top:2px}
+.srv-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:auto}
+.pill{display:inline-flex;align-items:center;gap:7px;border-radius:999px;padding:3px 11px;font-size:12.5px;font-weight:600;background:var(--panel2);border:1px solid var(--line);color:var(--muted)}
+.pill.on{color:#bff0a8;border-color:#2f5a27;background:#16241a}
+.pill.busy{color:#f3d58c;border-color:#5c4b1d;background:#231e11}
+.pill.err{color:#ffb4ae;border-color:#5f2724;background:#2b1a19}
+.srv.add{align-items:center;justify-content:center;border-style:dashed;color:var(--muted);background:transparent;box-shadow:none;font-weight:600}
+.srv.add:hover{color:var(--text);border-color:var(--green-d)}
+.srv.add .plus{width:46px;height:46px;border-radius:14px;background:var(--panel2);display:flex;align-items:center;justify-content:center;font-size:26px;color:var(--green)}
+/* jugadores */
+.plist{display:flex;flex-direction:column;gap:8px}
+.prow{display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px 12px;flex-wrap:wrap}
+.prow .av{position:relative;width:40px;height:40px;border-radius:9px;background:var(--panel3);flex:none;image-rendering:pixelated;display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--muted);overflow:hidden}
+.prow .av img{width:100%;height:100%;image-rendering:pixelated}
+.prow .who{flex:1;min-width:160px}
+.prow .who b{font-size:15.5px}
+.prow .st{font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:6px;margin-top:1px}
+.prow .acts{display:flex;gap:6px;flex-wrap:wrap}
+.badge{font-size:11.5px;font-weight:700;padding:1px 8px;border-radius:6px;margin-left:6px;vertical-align:1px}
+.badge.op{background:#2b2410;color:#f0c75a}.badge.wl{background:#14263a;color:#8cc4ff}.badge.ban{background:#34191a;color:#ff8f87}
+.pstats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.pstat{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 14px;font-size:13px;color:var(--muted)}
+.pstat b{display:block;font-size:19px;color:var(--text)}
+/* buscador de modpacks */
+.srcsw{display:inline-flex;background:var(--panel2);border:1px solid var(--line);border-radius:11px;padding:4px;gap:4px;margin-bottom:12px}
+.srcsw button{border:0;background:none;padding:7px 14px;border-radius:8px;cursor:pointer;color:var(--muted);font-weight:600}
+.srcsw button.act{background:var(--panel);color:var(--text)}
+.packlist{display:flex;flex-direction:column;gap:8px;margin-top:12px;max-height:52vh;overflow:auto;padding-right:2px}
+.pack{display:flex;gap:12px;align-items:flex-start;padding:10px;border:1px solid var(--line);border-radius:13px;background:var(--panel2);cursor:pointer;transition:border-color .15s}
+.pack:hover{border-color:#4a525e}
+.pack img,.pack .noimg{width:56px;height:56px;border-radius:11px;flex:none;object-fit:cover;background:#0c0e11}
+.pack .t{font-weight:700}
+.pack .d{color:var(--muted);font-size:13px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.pack .m{font-size:12px;color:var(--muted);margin-top:4px;display:flex;gap:8px;flex-wrap:wrap}
+.vrow{display:flex;align-items:center;gap:10px;padding:9px 10px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.vrow .grow{flex:1;min-width:180px}
+@media (max-width:640px){
+  header{flex-wrap:wrap;padding:12px 16px}
+  header h1{display:none}
+  select.pick{max-width:none;flex:1 1 100%;order:5}
+  .wrap{padding:0 12px 50px}
+  .card{padding:16px}
+  .addr-row .lbl{width:100%}
+  .powerbox{width:132px;height:132px;margin:0 auto 20px}
+  .hero h2{font-size:22px}
+  .address.big{font-size:19px}
+  .modal{padding:18px 16px}
+}
+</style>
+</head>
+<body>
+<header>
+  <svg class="logo" viewBox="0 0 16 16"><rect width="16" height="16" fill="#5a8f29"/><rect y="5" width="16" height="11" fill="#795533"/><rect y="5" width="16" height="2" fill="#6aa531"/><rect x="2" y="9" width="2" height="2" fill="#634329"/><rect x="9" y="11" width="2" height="2" fill="#634329"/><rect x="12" y="8" width="2" height="2" fill="#8b6340"/></svg>
+  <h1>Servidor Home<small>Tus servidores de Minecraft, en este PC</small></h1>
+  <div class="sp"></div>
+  <button class="btn sm back" id="btnHome" title="Volver a la lista de servidores">← Mis servidores</button>
+  <button class="btn sm" id="btnAdd">＋ Agregar servidor</button>
+  <button class="btn sm" id="btnQuit" title="Cerrar la app (apaga los servidores guardando el mundo)">Salir</button>
+</header>
+
+<div class="wrap">
+  <div class="upd hide" id="updBox"></div>
+  <div class="warnbox hide" id="offline" style="margin:0 0 14px">Servidor Home está cerrado o no responde. Ábrelo de nuevo con el acceso directo «Servidor Home»; esta página se actualiza sola.</div>
+  <!-- Bienvenida -->
+  <section id="welcome" class="welcome hide">
+    <svg width="72" height="72" viewBox="0 0 16 16" style="image-rendering:pixelated"><rect width="16" height="16" fill="#5a8f29"/><rect y="5" width="16" height="11" fill="#795533"/><rect y="5" width="16" height="2" fill="#6aa531"/><rect x="2" y="9" width="2" height="2" fill="#634329"/><rect x="9" y="11" width="2" height="2" fill="#634329"/></svg>
+    <h2>Tu servidor de Minecraft, en este PC</h2>
+    <p>Importa tu modpack, presiona encender y comparte una dirección fija con tus amigos. Sin abrir puertos del router: la conexión va por playit.gg.</p>
+    <button class="btn primary big" onclick="openWizard('search')">Buscar un modpack</button>
+    <div style="margin-top:10px"><button class="link" onclick="openWizard('file')">o subir el archivo de un modpack</button></div>
+    <div style="margin-top:14px"><button class="link" onclick="openWizard('plain')">o crear un servidor sin mods</button></div>
+  </section>
+
+  <!-- Inicio: elegir servidor -->
+  <section id="home" class="hide">
+    <div class="home-title"><div><h2>Tus servidores</h2><div class="muted small">Elige uno para encenderlo, ver la consola o administrar jugadores.</div></div></div>
+    <div class="srv-grid" id="srvGrid"></div>
+  </section>
+
+  <!-- Servidor -->
+  <section id="view" class="hide">
+    <div class="card">
+      <div class="hero">
+        <div class="info">
+          <div class="namerow"><img class="sicon hide" id="vIcon" alt=""><h2 id="vName"></h2></div>
+          <div class="sub" id="vSub"></div>
+          <div class="status"><span class="dot" id="vDot"></span><span id="vStatus"></span></div>
+          <div class="chips" id="vPlayers"></div>
+        </div>
+        <div class="powerbox">
+          <button class="power" id="power"></button>
+          <button class="restart" id="restart" title="Reiniciar el servidor" aria-label="Reiniciar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg></button>
+        </div>
+      </div>
+      <div class="prog hide" id="vProg">
+        <div class="prog-top"><b id="vProgLabel"></b><span id="vProgPct"></span></div>
+        <div class="bar"><div id="vProgBar"></div></div>
+        <div class="muted small" id="vProgDetail"></div>
+      </div>
+      <div class="hint hide" id="vHint"></div>
+      <div class="fixed hide" id="vFixed"></div>
+    </div>
+
+    <div class="card">
+      <h3>Cómo entran tus amigos</h3>
+      <div class="addr-row">
+        <div class="lbl">Por internet<br><span class="small">vía playit.gg</span></div>
+        <div class="val" id="playitBox"></div>
+      </div>
+      <div class="addr-row">
+        <div class="lbl">En tu casa<br><span class="small">misma red wifi</span></div>
+        <div class="val row"><span class="address" id="lanAddr"></span><button class="btn sm" data-copy="#lanAddr">Copiar</button></div>
+      </div>
+      <div class="addr-row">
+        <div class="lbl">Desde este PC</div>
+        <div class="val"><span class="address" id="localAddr" style="font-size:16px"></span></div>
+      </div>
+      <div class="addr-row hide" id="shareRow">
+        <div class="lbl">Mods para tus amigos<br><span class="small">lo que necesitan en su juego</span></div>
+        <div class="val" id="shareBox"></div>
+      </div>
+      <div class="warnbox hide" id="offlineWarn">Permites cuentas no premium: con la dirección de internet, cualquiera podría entrar usando cualquier nombre (incluso el tuyo). Activa la <b>lista blanca</b> en Ajustes y agrega a tus amigos.</div>
+    </div>
+
+    <div class="tabs" id="tabs">
+      <div class="tab act" data-t="console">Consola</div>
+      <div class="tab" data-t="players">Jugadores <span class="muted" id="tabPlayersN"></span></div>
+      <div class="tab" data-t="addons" id="tabAddons">Mods</div>
+      <div class="tab" data-t="settings">Ajustes</div>
+      <div class="tab" data-t="backups">Respaldos</div>
+    </div>
+
+    <section data-p="console">
+      <div class="console" id="console"></div>
+      <div class="cmdline">
+        <input type="text" id="cmd" placeholder="Comando del servidor (ej: op TuNombre, say hola, time set day)" autocomplete="off">
+        <button class="btn" id="bSend">Enviar</button>
+      </div>
+    </section>
+
+    <section data-p="players" class="hide">
+      <div class="pstats" id="pStats"></div>
+      <div class="card" style="padding:14px 16px">
+        <div class="row">
+          <input type="text" id="pAdd" placeholder="Nombre de un jugador (exacto, como en Minecraft)" style="max-width:320px" maxlength="16" autocomplete="off">
+          <button class="btn sm" data-padd="whitelist_add">Agregar a la lista blanca</button>
+          <button class="btn sm" data-padd="op">Hacer admin</button>
+          <button class="btn sm danger" data-padd="ban">Banear</button>
+        </div>
+        <div class="muted small" id="pNote" style="margin-top:8px"></div>
+      </div>
+      <div class="plist" id="pList"></div>
+    </section>
+
+    <section data-p="addons" class="hide">
+      <div class="row hide" id="shareModsRow" style="margin-bottom:12px"><button class="btn sm" id="bShareMods">Compartir mods con amigos</button><span class="muted small">Arma un .zip con los mods que tus amigos necesitan para entrar.</span></div>
+      <div class="drop" id="drop">Arrastra aquí archivos <b>.jar</b> para agregarlos, o <label style="color:var(--blue);cursor:pointer"><u>elige archivos</u><input type="file" id="fileIn" multiple accept=".jar,.zip" hidden></label>.<br><span class="small">Se cargan la próxima vez que enciendas el servidor.</span></div>
+      <div class="row" style="margin:14px 0 8px"><input type="search" id="addonFilter" placeholder="Buscar mod…" style="max-width:320px"><span class="muted small" id="addonCount"></span></div>
+      <table><tbody id="addonList"></tbody></table>
+    </section>
+
+    <section data-p="settings" class="hide">
+      <div class="card" id="verCard">
+        <h3>Versión</h3>
+        <div class="muted small" id="verNow" style="margin:-4px 0 12px"></div>
+        <div id="sPick"></div>
+        <label class="check hide" id="verNewWorldWrap" style="margin-top:12px"><input type="checkbox" id="verNewWorld"><div>Empezar con un mundo nuevo<small>El mundo actual no se borra: queda guardado aparte en la carpeta del servidor (mundos-anteriores).</small></div></label>
+        <div id="verWarn"></div>
+        <div class="foot"><span class="muted small" id="verOff"></span><button class="btn primary" id="bVersion">Cambiar versión</button></div>
+      </div>
+
+      <div class="card" id="lookCard">
+        <h3>Imagen y mensaje del servidor</h3>
+        <p class="muted small" style="margin-top:-4px">Así lo ven tus amigos en su lista de servidores de Minecraft. Arrastra una imagen encima o elígela: se recorta al centro y se ajusta a 64×64.</p>
+        <div class="mcentry" id="apEntry" title="Arrastra una imagen aquí">
+          <div class="mcicon" id="apIcon"></div>
+          <div class="mctext">
+            <div class="mcrow"><span class="mcname" id="apName"></span><span class="mcplayers"><span id="apPlayers">0/20</span><svg width="20" height="14" viewBox="0 0 10 7"><rect x="0" y="5" width="2" height="2" fill="#5f5"/><rect x="2" y="4" width="2" height="3" fill="#5f5"/><rect x="4" y="3" width="2" height="4" fill="#5f5"/><rect x="6" y="1" width="2" height="6" fill="#5f5"/><rect x="8" y="0" width="2" height="7" fill="#5f5"/></svg></span></div>
+            <div class="mcmotd" id="apMotd"></div>
+          </div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <label class="btn sm" style="cursor:pointer">Cambiar imagen<input type="file" id="iconIn" accept="image/*" hidden></label>
+          <button class="btn sm danger hide" id="bIconDel">Quitar imagen</button>
+        </div>
+        <div class="grid" style="margin-top:14px">
+          <label class="f" style="grid-column:1/-1"><span>Mensaje del servidor (línea 1)</span><input type="text" id="sMotd" maxlength="90" data-motd></label>
+          <label class="f" style="grid-column:1/-1"><span>Línea 2 (opcional)</span><input type="text" id="sMotd2" maxlength="90" data-motd></label>
+        </div>
+        <div class="mccolors" id="mcColors"><span class="muted small" style="margin-right:4px">Colores:</span></div>
+        <div class="foot"><span class="muted small" id="lookNote"></span><button class="btn primary" id="bSaveLook">Guardar mensaje</button></div>
+      </div>
+
+      <div class="card">
+        <h3>Básico</h3>
+        <div class="grid">
+          <label class="f"><span>Nombre</span><input type="text" id="sName" maxlength="60"></label>
+          <label class="f"><span>Máximo de jugadores</span><input type="number" id="sMax" min="1" max="500"></label>
+          <label class="f"><span>Modo de juego</span><select id="sGamemode"><option value="survival">Supervivencia</option><option value="creative">Creativo</option><option value="adventure">Aventura</option><option value="spectator">Espectador</option></select></label>
+          <label class="f"><span>Dificultad</span><select id="sDifficulty"><option value="peaceful">Pacífica</option><option value="easy">Fácil</option><option value="normal">Normal</option><option value="hard">Difícil</option></select></label>
+          <label class="f" style="grid-column:1/-1"><span>Memoria RAM para el servidor</span><div class="range"><input type="range" id="sRam" min="1024" step="512"><output id="sRamOut"></output></div><div class="small" id="sRamHint"></div></label>
+        </div>
+        <div class="grid" style="margin-top:14px">
+          <label class="check"><input type="checkbox" id="sOffline"><div>Permitir cuentas no premium<small>Para amigos con SKLauncher, TLauncher u otros launchers sin cuenta oficial.</small></div></label>
+          <label class="check"><input type="checkbox" id="sWhitelist"><div>Solo jugadores de la lista blanca<small>Recomendado si compartes la dirección de internet.</small></div></label>
+          <label class="check"><input type="checkbox" id="sPvp"><div>PvP (jugadores pueden pelear)</div></label>
+          <label class="check"><input type="checkbox" id="sAutoFix"><div>Arreglar problemas solo<small>Si no enciende, busca la causa (mods que faltan o no calzan, RAM, Java…), la arregla y reintenta. Un mod que no deja encender y no tiene arreglo se desactiva (antes se respalda el mundo).</small></div></label>
+        </div>
+        <div class="foot"><button class="btn primary" id="bSaveBasic">Guardar</button></div>
+      </div>
+
+      <div class="card" id="perfCard">
+        <h3>Rendimiento</h3>
+        <label class="check"><input type="checkbox" id="sJavaOpt"><div>Optimizar Java (recomendado)<small>Ajustes de memoria probados para servidores de Minecraft: menos tirones cuando Java limpia la memoria. Apágalo solo si un modpack trae sus propios ajustes y algo falla.</small></div></label>
+        <div id="perfMods" class="hide" style="margin-top:14px">
+          <div><b>Mods de rendimiento</b> <span class="muted small" id="perfModsText"></span></div>
+          <div class="row" style="margin-top:8px"><button class="btn sm" id="bPerfMods">Agregar mods de rendimiento</button><span class="small" id="perfMsg"></span></div>
+        </div>
+        <p class="muted small" style="margin:14px 0 0">Mientras haya un servidor encendido, el PC no se suspende solo y Windows no lo pone en modo de ahorro de energía. Si hay lag con muchos jugadores, baja <code>simulation-distance</code> a 6 u 8 en <i>Opciones avanzadas → Todas las propiedades</i>.</p>
+        <div class="foot"><button class="btn primary" id="bSavePerf">Guardar</button></div>
+      </div>
+
+      <div class="card">
+        <h3>Jugadores</h3>
+        <p class="muted small" style="margin:-4px 0 10px">Admins, baneos, expulsiones y lista blanca están ahora en la pestaña <b>Jugadores</b>, con todos los que han entrado y quién está conectado.</p>
+        <button class="btn sm" onclick="setTab('players')">Ir a Jugadores</button>
+      </div>
+
+      <details class="card">
+        <summary>Opciones avanzadas</summary>
+        <div class="grid" style="margin-top:12px">
+          <label class="f"><span>Puerto</span><input type="number" id="sPort" min="1024" max="65535"></label>
+          <label class="f"><span>Argumentos extra de Java</span><input type="text" id="sJvm" placeholder="-XX:+UseG1GC"></label>
+        </div>
+        <div class="foot"><button class="btn" id="bSaveAdv">Guardar</button></div>
+        <h3 style="margin-top:18px">Todas las propiedades (server.properties)</h3>
+        <table><tbody id="allProps"></tbody></table>
+        <div class="foot"><button class="btn" id="bSaveAll">Guardar propiedades</button></div>
+        <div id="eulaSec" class="hide" style="margin-top:18px">
+          <label class="check"><input type="checkbox" id="sEula"><div>Acepto el <a href="https://aka.ms/MinecraftEULA" target="_blank" rel="noopener">EULA de Minecraft</a></div></label>
+          <div class="foot"><button class="btn primary" id="bEula">Guardar</button></div>
+        </div>
+        <h3 style="margin-top:22px;color:var(--red)">Borrar servidor</h3>
+        <p class="muted small">Borra el servidor, su mundo y sus respaldos de este PC. No se puede deshacer.</p>
+        <div class="row"><input type="text" id="delConfirm" placeholder="Escribe el nombre para confirmar" style="max-width:320px"><button class="btn danger fill" id="bDelete">Borrar</button></div>
+        <p class="muted small" style="margin-top:18px">Carpeta del servidor: <code id="sPath"></code></p>
+      </details>
+    </section>
+
+    <section data-p="backups" class="hide">
+      <div class="row" style="margin-bottom:12px"><button class="btn primary" id="bBackup">Respaldar el mundo ahora</button><span class="muted small">Funciona con el servidor encendido.</span></div>
+      <table><tbody id="backupList"></tbody></table>
+    </section>
+  </section>
+  <p class="muted small" id="bgNote" style="text-align:center;margin-top:28px">Servidor Home sigue funcionando aunque cierres esta pestaña. Para cerrarlo del todo usa «Salir».</p>
+</div>
+<footer class="appfoot" id="appFoot"></footer>
+
+<!-- Asistente para agregar servidor -->
+<div class="modal-bg" id="wizard">
+  <div class="modal">
+    <!-- Paso 1: origen -->
+    <div id="wSource">
+      <h2>Agregar servidor</h2>
+      <div class="muted" id="wSub">¿De dónde sacamos el modpack?</div>
+      <div class="seg" id="seg">
+        <button data-s="search" class="act">Buscar</button>
+        <button data-s="file">Archivo</button>
+        <button data-s="launcher">Desde mi launcher</button>
+        <button data-s="plain">Sin mods</button>
+      </div>
+
+      <div data-sp="search">
+        <div class="srcsw" id="srcSw"><button data-src="modrinth" class="act">Modrinth</button><button data-src="curseforge">CurseForge</button></div>
+        <div id="packSearchUi">
+          <div class="row"><input type="search" id="qPack" placeholder="Busca un modpack: Create, Cobblemon, All the Mods…" style="flex:1" autocomplete="off"><button class="btn primary" id="bSearch">Buscar</button></div>
+          <div class="packlist" id="packResults"></div>
+        </div>
+        <div id="cfKeyBox" class="hide">
+          <div class="detect" style="margin-top:0">
+            <b>CurseForge pide una clave para buscar</b>
+            <p class="muted small" style="margin:6px 0 10px">Su API solo funciona con una clave propia (gratis): entra a <a href="https://console.curseforge.com/" target="_blank" rel="noopener">console.curseforge.com</a> con tu cuenta, crea una clave de API y pégala aquí. Se guarda solo en este PC. Con la clave, la app también puede crear servidores desde los .zip de CurseForge que solo traen la lista de mods.</p>
+            <div class="row"><input type="text" id="cfKey" placeholder="Clave de la API de CurseForge" style="flex:1" autocomplete="off" spellcheck="false"><button class="btn primary" id="bCfKey">Guardar clave</button></div>
+          </div>
+        </div>
+        <div id="packDetail" class="hide">
+          <div class="row" style="margin-bottom:10px"><button class="btn sm" id="bPackBack">← Resultados</button><b id="pdTitle" style="font-size:17px"></b><a class="small" id="pdLink" target="_blank" rel="noopener">ver página ↗</a></div>
+          <div class="muted small" id="pdNote" style="margin-bottom:8px"></div>
+          <div class="packlist" id="pdVersions" style="gap:0;border:1px solid var(--line);border-radius:12px"></div>
+        </div>
+        <div class="muted small" id="cfKeyNow" style="margin-top:10px"></div>
+      </div>
+
+      <div data-sp="file" class="hide">
+        <div class="drop" id="packDrop">
+          <b>Arrastra aquí el modpack del servidor</b><br>
+          <span class="small">.zip de «Server Pack / Server Files» de CurseForge, o .mrpack de Modrinth</span><br><br>
+          <label class="btn primary" style="cursor:pointer">Elegir archivo<input type="file" id="packIn" accept=".zip,.mrpack" hidden></label>
+        </div>
+        <p class="muted small">En CurseForge: página del modpack → <i>Files</i> → descarga el <i>Server Pack</i>. Si el modpack es tuyo y no tiene pack de servidor, usa «Desde mi launcher».</p>
+      </div>
+
+      <div data-sp="launcher" class="hide">
+        <div id="instList"><div class="muted">Buscando modpacks instalados…</div></div>
+        <details style="margin-top:10px"><summary>Otra carpeta o archivo</summary>
+          <div class="row" style="margin-top:8px"><input type="text" id="pathIn" placeholder="Ruta de la carpeta del modpack, o de un .zip / .mrpack" style="flex:1"><button class="btn" id="bPath">Analizar</button></div>
+        </details>
+      </div>
+
+      <div data-sp="plain" class="hide">
+        <div class="types" id="types"></div>
+        <div id="nPick"></div>
+        <div class="grid" style="margin-top:14px">
+          <label class="f"><span>Nombre</span><input type="text" id="nName" placeholder="Mi servidor" maxlength="60"></label>
+        </div>
+        <div style="margin-top:14px"><label class="f"><span>Memoria RAM</span><div class="range"><input type="range" id="nRam" min="1024" step="512"><output id="nRamOut"></output></div></label></div>
+        <label class="check" style="margin-top:14px"><input type="checkbox" id="nEula"><div>Acepto el <a href="https://aka.ms/MinecraftEULA" target="_blank" rel="noopener">EULA de Minecraft</a><small>Mojang lo exige para tener un servidor.</small></div></label>
+        <div class="foot"><button class="btn" onclick="closeWizard()">Cancelar</button><button class="btn primary" id="bCreatePlain">Crear y encender</button></div>
+      </div>
+      <div class="foot" id="srcFoot"><button class="btn" onclick="closeWizard()">Cancelar</button></div>
+    </div>
+
+    <!-- Paso 2: progreso -->
+    <div id="wProgress" class="hide">
+      <h2 id="pTitle">Preparando el modpack</h2>
+      <div class="muted" id="pMsg">Subiendo…</div>
+      <div class="bar" id="pBar"><div></div></div>
+      <div class="foot"><button class="btn" id="bCancelProgress">Cancelar</button></div>
+    </div>
+
+    <!-- Paso 3: confirmar -->
+    <div id="wConfirm" class="hide">
+      <h2>Revisa y confirma</h2>
+      <div class="muted" id="cKind"></div>
+      <div class="detect">
+        <div class="big" id="cDetected"></div>
+        <div class="muted small" id="cFrom"></div>
+        <div class="grid" style="margin-top:14px">
+          <label class="f"><span>Loader</span><select id="eType"></select></label>
+        </div>
+        <div id="cPick" style="margin-top:12px"></div>
+        <div id="cVerWarn"></div>
+      </div>
+      <div id="cWarnings"></div>
+      <div id="cClientWrap" class="hide">
+        <b id="cClientTitle"></b>
+        <div class="muted small">Estos mods son solo para el jugador (gráficos, interfaz, sonido); en el servidor no sirven y a veces lo botan. Tus amigos sí los pueden seguir usando.</div>
+        <div class="clist" id="cClient"></div>
+      </div>
+      <div class="grid" style="margin-top:14px">
+        <label class="f"><span>Nombre del servidor</span><input type="text" id="cName" maxlength="60"></label>
+        <label class="f"><span>Memoria RAM</span><div class="range"><input type="range" id="cRam" min="1024" step="512"><output id="cRamOut"></output></div><div class="small" id="cRamHint"></div></label>
+      </div>
+      <label class="check" style="margin-top:14px"><input type="checkbox" id="cEula"><div>Acepto el <a href="https://aka.ms/MinecraftEULA" target="_blank" rel="noopener">EULA de Minecraft</a><small>Mojang lo exige para tener un servidor.</small></div></label>
+      <label class="check" style="margin-top:8px"><input type="checkbox" id="cAuto" checked><div>Encender al terminar de instalar</div></label>
+      <div class="foot"><button class="btn" id="bCancelImport">Cancelar</button><button class="btn primary" id="bConfirm">Importar y encender</button></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+let INFO = null, STATE = { servers: [], playit: {}, imports: [] }, CUR = null, LOGSEQ = 0, TAB = 'console';
+let ADDONS = [], IMPORT = null, IMPORT_TIMER = null, NEWTYPE = 'vanilla', PLAYIT_SEQ = 0;
+let CLOSED = false, FAILS = 0; const TIMERS = [];
+const HIST = []; let hIdx = -1;
+const LOADER_TYPES = ['fabric', 'forge', 'neoforge'];
+const TYPE_LABEL = { vanilla: 'Vanilla', paper: 'Paper', fabric: 'Fabric', forge: 'Forge', neoforge: 'NeoForge' };
+
+async function api(path, opts = {}) {
+  const o = { method: opts.method || 'GET', headers: {} };
+  if (opts.timeout && window.AbortSignal && AbortSignal.timeout) o.signal = AbortSignal.timeout(opts.timeout);
+  if (opts.json !== undefined) { o.body = JSON.stringify(opts.json); o.headers['Content-Type'] = 'application/json'; }
+  if (opts.body !== undefined) o.body = opts.body;
+  const r = await fetch('/api/' + path, o);
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || ('Error ' + r.status));
+  return data;
+}
+function toast(msg, err) {
+  const t = document.createElement('div'); t.className = 'toast' + (err ? ' err' : ''); t.textContent = msg;
+  document.body.appendChild(t); setTimeout(() => t.remove(), err ? 7000 : 3000);
+}
+// Con «input» (el texto de ayuda de un campo) devuelve lo escrito (puede ser '') al aceptar, o false al cancelar.
+function ask(text, okLabel = 'Sí', cancelLabel = 'Cancelar', danger = false, input = null) {
+  return new Promise(resolve => {
+    const bg = document.createElement('div');
+    bg.className = 'modal-bg open'; bg.style.zIndex = 30; bg.style.alignItems = 'center';
+    bg.innerHTML = `<div class="modal" role="dialog" style="width:min(460px,100%)"><div style="white-space:pre-wrap;font-size:15.5px">${esc(text)}</div>
+      ${input !== null ? `<input type="text" class="ask-in" maxlength="120" placeholder="${esc(input)}" style="width:100%;margin-top:14px">` : ''}
+      <div class="foot"><button class="btn" data-a="0">${esc(cancelLabel)}</button><button class="btn ${danger ? 'danger fill' : 'primary'}" data-a="1">${esc(okLabel)}</button></div></div>`;
+    const inp = bg.querySelector('.ask-in');
+    const done = v => { bg.remove(); document.removeEventListener('keydown', key, true); resolve(v && inp ? inp.value.trim() : v); };
+    const key = e => {
+      if (e.key === 'Escape') { e.preventDefault(); done(false); }
+      if (e.key === 'Enter') { e.preventDefault(); const f = document.activeElement; done(f && f.dataset && f.dataset.a !== undefined ? f.dataset.a === '1' : true); }
+    };
+    bg.onclick = e => { const a = e.target.closest('[data-a]'); if (a) done(a.dataset.a === '1'); else if (e.target === bg) done(false); };
+    document.addEventListener('keydown', key, true);
+    document.body.appendChild(bg); (inp || bg.querySelector('[data-a="1"]')).focus();
+  });
+}
+async function act(fn, okMsg) { try { const r = await fn(); if (okMsg) toast(okMsg); return r; } catch (e) { toast(e.message, true); } }
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmtMB = mb => mb >= 1024 ? (mb / 1024).toFixed(mb % 1024 ? 1 : 0) + ' GB' : mb + ' MB';
+const fmtSize = b => b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB';
+const cur = () => STATE.servers.find(s => s.id === CUR);
+function copyText(t) {
+  if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(t);
+  else { const a = document.createElement('textarea'); a.value = t; document.body.appendChild(a); a.select(); document.execCommand('copy'); a.remove(); }
+  toast('Copiado: ' + t);
+}
+document.addEventListener('click', e => { const b = e.target.closest('[data-copy]'); if (b) copyText($(b.dataset.copy).textContent.trim()); });
+
+/* ---------------- estado general ---------------- */
+let HIDDEN_TICK = 0;
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { refresh(); pollLog(); } });
+async function refresh() {
+  if (CLOSED) return;
+  if (document.hidden && !UPD_WAIT && ++HIDDEN_TICK % 5) return;      // minimizada: cada 5 s basta
+  try { STATE = await api('state', { timeout: 8000 }); FAILS = 0; $('#offline').classList.add('hide'); }
+  catch { if (!UPD_WAIT && ++FAILS >= 3) $('#offline').classList.remove('hide'); return; }
+  if (CLOSED) return;
+  if (INFO && STATE.app_version && STATE.app_version !== INFO.version) { reloadHere(); return; }   // la app se actualizó
+  renderUpdate();
+  const servers = STATE.servers;
+  if (CUR && !servers.find(s => s.id === CUR)) CUR = null;
+  // Al abrir la app se elige el servidor en la pantalla de inicio (no se entra solo a ninguno)
+  $('#welcome').classList.toggle('hide', servers.length > 0);
+  $('#home').classList.toggle('hide', !servers.length || !!CUR);
+  $('#view').classList.toggle('hide', !CUR);
+  document.body.classList.toggle('in-server', !!CUR);
+  if (!CUR) renderHome(servers);
+  const s = cur(); if (s) renderServer(s);
+  renderPlayit();
+}
+const GRASS_ICON = '<svg viewBox="0 0 16 16"><rect width="16" height="16" fill="#5a8f29"/><rect y="5" width="16" height="11" fill="#795533"/><rect y="5" width="16" height="2" fill="#6aa531"/><rect x="2" y="9" width="2" height="2" fill="#634329"/><rect x="9" y="11" width="2" height="2" fill="#634329"/><rect x="12" y="8" width="2" height="2" fill="#8b6340"/></svg>';
+const STATUS_PILL = {
+  'en línea': ['on', 'Encendido'], 'iniciando': ['busy', 'Encendiendo…'], 'deteniendo': ['busy', 'Apagando…'],
+  'instalando': ['busy', 'Instalando…'], 'reparando': ['busy', 'Arreglando…'], 'detenido': ['', 'Apagado'],
+  'sin instalar': ['', 'Sin instalar'], 'error': ['err', 'Con problemas'],
+};
+function renderHome(servers) {
+  const grid = $('#srvGrid');
+  const key = JSON.stringify(servers.map(s => [s.id, s.name, s.status, s.players.length, s.icon, s.mc_version, s.type_label, s.loader_version, s.mods_active, s.progress && s.progress.pct]));
+  if (grid.dataset.key === key) return;
+  grid.dataset.key = key;
+  grid.innerHTML = servers.map(s => {
+    const [cls, txt] = STATUS_PILL[s.status] || ['', s.status];
+    const icon = s.icon ? `<img src="/api/servers/${encodeURIComponent(s.id)}/icono?v=${s.icon}" alt="">` : GRASS_ICON;
+    const pl = s.status === 'en línea' ? `${s.players.length} ${s.players.length === 1 ? 'jugador' : 'jugadores'}` : (s.progress ? s.progress.pct + '%' : '');
+    return `<button class="srv ${s.status === 'en línea' ? 'on' : ''}" data-srv="${esc(s.id)}">
+      <div class="srv-top"><div class="srv-ico">${icon}</div><div style="min-width:0"><div class="srv-name">${esc(s.name)}</div>
+      <div class="srv-sub">${esc(s.type_label + (s.loader_version ? ' ' + s.loader_version : ''))} · ${esc(s.mc_version || '?')}${s.addons_dir === 'mods' ? ` · ${s.mods_active} mods` : ''}</div></div></div>
+      <div class="srv-foot"><span class="pill ${cls}"><span class="dot ${cls === 'on' ? 'on' : cls === 'busy' ? 'busy' : cls === 'err' ? 'err' : ''}"></span>${esc(txt)}</span><span class="muted small">${esc(pl)}</span></div></button>`;
+  }).join('') + '<button class="srv add" id="srvAdd"><span class="plus">＋</span>Agregar servidor<span class="muted small" style="font-weight:400">Busca un modpack, sube uno o crea uno sin mods</span></button>';
+  $$('[data-srv]').forEach(b => b.onclick = () => selectServer(b.dataset.srv));
+  $('#srvAdd').onclick = () => openWizard('search');
+}
+function goHome() { CUR = null; LOGSEQ = 0; $('#console').innerHTML = ''; $('#srvGrid').dataset.key = ''; setTab('console'); refresh(); window.scrollTo(0, 0); }
+$('#btnHome').onclick = goHome;
+// Si la página se recarga sola (la app se actualizó) vuelve al mismo servidor; al abrir la app se empieza en la lista.
+function reloadHere() { try { if (CUR) sessionStorage.setItem('sh-volver', CUR); } catch { } location.reload(); }
+function selectServer(id) { CUR = id; LOGSEQ = 0; $('#console').innerHTML = ''; PLAYERS = null; refresh().then(loadTab); pollLog(); window.scrollTo(0, 0); }
+
+const POWER_ON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 3v9"/><path d="M6.3 6.8a8 8 0 1 0 11.4 0"/></svg>';
+function renderServer(s) {
+  $('#vName').textContent = s.name;
+  let sub = s.type_label + (s.loader_version ? ' ' + s.loader_version : '') + ' · Minecraft ' + (s.mc_version || '?');
+  if (s.addons_dir === 'mods') sub += ` · ${s.mods_active} mods activos`;
+  if (s.addons_dir === 'plugins') sub += ` · ${s.mods_active} plugins`;
+  const vs = $('#vSub');
+  if (vs.dataset.key !== sub) {
+    vs.dataset.key = sub;
+    vs.innerHTML = esc(sub) + ' <button class="vlink" id="bVerLink" title="Cambiar la versión de Minecraft de este servidor">cambiar versión</button>';
+    $('#bVerLink').onclick = () => { setTab('settings'); setTimeout(() => $('#verCard').scrollIntoView({ behavior: 'smooth', block: 'start' }), 60); };
+  }
+  if (TAB === 'settings') updateVersionButton();
+  const map = {
+    'en línea': ['on', s.players.length ? `Encendido · ${s.players.length} jugando` : 'Encendido · esperando jugadores'],
+    'iniciando': ['busy', 'Encendiendo… ' + (s.addons_dir === 'mods' ? 'con mods la primera vez puede tardar 2 a 5 minutos' : 'unos segundos')],
+    'deteniendo': ['busy', 'Apagando y guardando el mundo…'],
+    'instalando': ['busy', 'Instalando…'],
+    'reparando': ['busy', 'Arreglando un problema…'],
+    'detenido': ['', 'Apagado'],
+    'sin instalar': ['', 'Sin instalar'],
+    'error': ['err', s.error || 'Error'],
+  };
+  const [cls, txt] = map[s.status] || ['', s.status];
+  $('#vDot').className = 'dot ' + cls; $('#vStatus').textContent = txt;
+  const pkey = s.players.join(',');
+  if ($('#vPlayers').dataset.key !== pkey) {
+    $('#vPlayers').dataset.key = pkey;
+    $('#vPlayers').innerHTML = s.players.map(p => `<span class="chip"><img src="${headUrl(p)}" alt="" onerror="this.remove()">${esc(p)}</span>`).join('');
+  }
+  $('#tabPlayersN').textContent = s.players.length ? `(${s.players.length})` : '';
+  const pw = $('#power');
+  const running = ['en línea', 'iniciando'].includes(s.status);
+  const busy = ['instalando', 'deteniendo'].includes(s.status);
+  const fixing = s.status === 'reparando';
+  pw.className = 'power' + (running || fixing ? ' off' : busy ? ' wait' : '');
+  pw.innerHTML = POWER_ON + `<span>${running ? 'Apagar' : fixing ? 'Detener' : busy ? 'Espera…' : (s.status === 'error' && !s.installed ? 'Reintentar' : 'Encender')}</span>`;
+  pw.disabled = busy;
+  pw.onclick = () => powerClick(s);
+  const rs = $('#restart');
+  rs.disabled = s.status !== 'en línea';
+  rs.classList.toggle('spin', s.status === 'deteniendo' && RESTARTING === s.id || (s.status === 'iniciando' && RESTARTING === s.id));
+  if (s.status === 'en línea' && RESTARTING === s.id && Date.now() - RESTART_T > 8000) RESTARTING = null;
+  rs.title = s.status === 'en línea' ? 'Reiniciar el servidor (guarda el mundo, apaga y vuelve a encender)' : 'Reiniciar: disponible con el servidor encendido';
+  rs.onclick = () => restartClick(s);
+  const hint = $('#vHint');
+  if (s.status === 'error' && s.hint) {
+    hint.classList.remove('hide');
+    const key = JSON.stringify(s.hint);
+    if (hint.dataset.key !== key) {
+      hint.dataset.key = key;
+      hint.innerHTML = `<b>Qué pasó:</b> ${esc(s.hint.text)}` + (s.hint.action ? `<div class="row"><button class="btn sm primary" id="bFix">${esc(s.hint.action.label)}</button>` +
+        (s.auto_fix ? '<span class="muted small">Si después aparece otro problema, la app lo intenta arreglar sola.</span>' : '') + '</div>' : '');
+      if (s.hint.action) $('#bFix').onclick = async () => { $('#bFix').disabled = true; await act(() => api(`servers/${s.id}/fix`, { method: 'POST', json: { action: s.hint.action } }), 'Arreglando y reintentando…'); refresh(); pollLog(); };
+    }
+  } else { hint.classList.add('hide'); hint.dataset.key = ''; }
+  renderProgress(s);
+  const port = s.port === 25565 ? '' : ':' + s.port;
+  $('#lanAddr').textContent = (INFO ? INFO.lan_ip : '?') + port;
+  $('#localAddr').textContent = 'localhost' + port;
+  $('#offlineWarn').classList.toggle('hide', !(s.online_mode === 'false' && s.whitelist !== 'true' && STATE.playit.address));
+  const ad = s.addons_dir;
+  $('#tabAddons').classList.toggle('hide', !ad);
+  $('#tabAddons').textContent = ad === 'plugins' ? 'Plugins' : 'Mods';
+  if (!ad && TAB === 'addons') setTab('console');
+  const vi = $('#vIcon'), isrc = s.icon ? `/api/servers/${encodeURIComponent(s.id)}/icono?v=${s.icon}` : '';
+  if (vi.dataset.src !== isrc) { vi.dataset.src = isrc; if (isrc) vi.src = isrc; }
+  vi.classList.toggle('hide', !isrc);
+  renderShare(s);
+  if (TAB === 'settings' && DETAIL && DETAIL.id === s.id) renderLook();
+}
+const fmtTime = sec => sec >= 60 ? `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')} min` : `${sec} s`;
+function renderProgress(s) {
+  const pg = s.progress, box = $('#vProg');
+  box.classList.toggle('hide', !pg);
+  box.classList.toggle('fixing', !!pg && pg.kind === 'reparando');
+  if (pg) {
+    $('#vProgLabel').textContent = pg.label;
+    $('#vProgPct').textContent = pg.pct + '%';
+    $('#vProgBar').style.width = Math.max(2, pg.pct) + '%';
+    $('#vProgDetail').textContent = [pg.detail, pg.steps > 1 ? `paso ${pg.step} de ${pg.steps}` : '', fmtTime(pg.elapsed)].filter(Boolean).join(' · ');
+  }
+  const fx = $('#vFixed'), list = s.repairs || [];
+  fx.classList.toggle('hide', !list.length || !!pg);
+  const key = JSON.stringify(list);
+  if (list.length && fx.dataset.key !== key) {
+    fx.dataset.key = key;
+    const note = list.some(x => /desactivé|quité|cambié/i.test(x)) ? '<span class="muted small">Los mods que se quitaron quedan desactivados en la pestaña Mods; ahí se pueden volver a activar.</span>' : '';
+    fx.innerHTML = `<b>Se arregló solo:</b><ul>${list.map(x => `<li>${esc(x.charAt(0).toUpperCase() + x.slice(1))}</li>`).join('')}</ul>
+      <div class="row"><button class="btn sm" id="bFixedOk">Entendido</button>${note}</div>`;
+    $('#bFixedOk').onclick = async () => { await act(() => api(`servers/${s.id}/repairs-clear`, { method: 'POST' })); refresh(); };
+  }
+  if (!list.length) fx.dataset.key = '';
+}
+async function powerClick(s) {
+  const isOn = x => ['en línea', 'iniciando', 'reparando'].includes(x.status);
+  const running = isOn(s);
+  // La pantalla se actualiza cada segundo: si el servidor cambió justo antes del clic (por ejemplo se apagó
+  // o se volvió a encender solo), no se hace lo contrario de lo que decía el botón; solo se actualiza.
+  const now = await api(`servers/${s.id}`).catch(() => null);
+  if (now && isOn(now) !== running) { refresh(); return; }
+  s = now || s;
+  if (running) {
+    if (s.players.length && !(await ask(`Hay ${s.players.length} jugando. ¿Apagar el servidor igual?`, 'Apagar', 'Cancelar', true))) return;
+    await act(() => api(`servers/${s.id}/stop`, { method: 'POST' }));
+  } else if (s.status === 'error' && !s.installed) {
+    await act(() => api(`servers/${s.id}/install`, { method: 'POST' }));
+  } else {
+    await act(() => api(`servers/${s.id}/start`, { method: 'POST' }));
+    setTab('console');
+  }
+  refresh(); pollLog();
+}
+
+let RESTARTING = null, RESTART_T = 0;
+async function restartClick(s) {
+  if (s.status !== 'en línea') return;
+  if (s.players.length && !(await ask(`Hay ${s.players.length} jugando. Se desconectarán unos minutos mientras el servidor se reinicia. ¿Reiniciar?`, 'Reiniciar', 'Cancelar'))) return;
+  RESTARTING = s.id; RESTART_T = Date.now();
+  const r = await act(() => api(`servers/${s.id}/restart`, { method: 'POST' }), 'Reiniciando: se guarda el mundo, se apaga y vuelve a encender.');
+  if (!r) RESTARTING = null;
+  refresh(); pollLog();
+}
+const headUrl = n => `https://mc-heads.net/avatar/${encodeURIComponent(n)}/64`;
+
+/* ---------------- jugadores ---------------- */
+let PLAYERS = null;
+const fmtSeen = ts => { if (!ts) return 'nunca visto por la app'; const m = Math.max(0, Math.round((Date.now() / 1000 - ts) / 60)); return m < 1 ? 'visto recién' : m < 60 ? `visto hace ${m} min` : m < 1440 ? `visto hace ${Math.round(m / 60)} h` : `visto hace ${Math.round(m / 1440)} días`; };
+async function loadPlayers(quiet) {
+  if (!CUR) return;
+  const id = CUR;
+  const d = quiet ? await api(`servers/${id}/players`).catch(() => null) : await act(() => api(`servers/${id}/players`));
+  if (!d || id !== CUR) return;
+  PLAYERS = d; renderPlayers();
+}
+function renderPlayers() {
+  const d = PLAYERS; if (!d) return;
+  const key = JSON.stringify(d);
+  if ($('#pList').dataset.key === key) return;
+  $('#pList').dataset.key = key;
+  const on = d.players.filter(p => p.online).length;
+  $('#pStats').innerHTML = `<div class="pstat"><b>${on}</b>conectados</div><div class="pstat"><b>${d.players.length}</b>conocidos</div>
+    <div class="pstat"><b>${d.players.filter(p => p.op).length}</b>admins</div><div class="pstat"><b>${d.players.filter(p => p.banned).length}</b>baneados</div>
+    <div class="pstat"><b>${d.whitelist_on ? 'Sí' : 'No'}</b>lista blanca activa</div>`;
+  $('#pNote').textContent = d.running ? 'Los cambios se aplican al tiro (se mandan como comandos del servidor).'
+    : 'El servidor está apagado: los cambios se guardan y valen desde el próximo encendido. Expulsar solo funciona con el servidor encendido.';
+  $('#pList').innerHTML = d.players.map(p => {
+    const st = p.online ? '<span class="dot on"></span>En línea' : `<span class="dot"></span>${esc(fmtSeen(p.seen))}`;
+    const b = (a, label, cls = '') => `<button class="btn sm ${cls}" data-pa="${a}" data-pn="${esc(p.name)}">${label}</button>`;
+    return `<div class="prow"><div class="av">${esc(p.name[0].toUpperCase())}<img src="${headUrl(p.name)}" alt="" style="position:absolute;opacity:0" onload="this.style.position='static';this.style.opacity=1;this.parentNode.firstChild.remove()" onerror="this.remove()"></div>
+      <div class="who"><b>${esc(p.name)}</b>${p.op ? '<span class="badge op">ADMIN</span>' : ''}${p.whitelisted ? '<span class="badge wl">LISTA BLANCA</span>' : ''}${p.banned ? '<span class="badge ban">BANEADO</span>' : ''}
+        <div class="st">${st}${p.banned && p.ban_reason ? ` · ${esc(p.ban_reason)}` : ''}</div></div>
+      <div class="acts">${p.op ? b('deop', 'Quitar admin') : b('op', 'Hacer admin')}
+        ${p.whitelisted ? b('whitelist_remove', 'Sacar de lista blanca') : b('whitelist_add', 'Lista blanca')}
+        ${p.online ? b('kick', 'Expulsar') : ''}
+        ${p.banned ? b('pardon', 'Desbanear') : b('ban', 'Banear', 'danger')}</div></div>`;
+  }).join('') || '<div class="muted" style="padding:10px 4px">Todavía no ha entrado nadie. Cuando alguien entre, aparece aquí; también puedes agregar a alguien por su nombre arriba.</div>';
+  $$('[data-pa]').forEach(b => b.onclick = () => playerAction(b.dataset.pa, b.dataset.pn));
+}
+async function playerAction(action, name) {
+  let reason = '';
+  if (action === 'ban') {
+    const r = await ask(`¿Banear a ${name}? No podrá volver a entrar hasta que lo desbanees.`, 'Banear', 'Cancelar', true, 'Motivo (opcional: lo verá al intentar entrar)');
+    if (r === false) return;
+    reason = r;
+  }
+  if (action === 'kick' && !(await ask(`¿Expulsar a ${name}? Puede volver a entrar.`, 'Expulsar', 'Cancelar'))) return;
+  if (action === 'op' && !(await ask(`¿Hacer admin a ${name}? Podrá usar todos los comandos (incluido banear y apagar el servidor).`, 'Hacer admin', 'Cancelar'))) return;
+  const msgs = { op: `${name} ahora es admin.`, deop: `${name} ya no es admin.`, kick: `${name} fue expulsado.`, ban: `${name} fue baneado.`, pardon: `${name} fue desbaneado.`, whitelist_add: `${name} quedó en la lista blanca.`, whitelist_remove: `${name} salió de la lista blanca.` };
+  const r = await act(() => api(`servers/${CUR}/players`, { method: 'POST', json: { action, name, reason } }), msgs[action]);
+  if (r) { setTimeout(() => loadPlayers(true), 700); setTimeout(() => loadPlayers(true), 2000); }
+}
+$$('[data-padd]').forEach(b => b.onclick = async () => {
+  const n = $('#pAdd').value.trim();
+  if (!/^[A-Za-z0-9_]{2,16}$/.test(n)) return toast('Escribe un nombre de Minecraft válido (2 a 16 letras, números o _).', true);
+  await playerAction(b.dataset.padd, n); $('#pAdd').value = '';
+});
+
+/* ---------------- actualizaciones ---------------- */
+let UPD_WAIT = null;        // versión que se está instalando: la página se recarga cuando la app vuelve
+const fmtAgo = ts => { const m = Math.max(0, Math.round((Date.now() / 1000 - ts) / 60)); return m < 1 ? 'recién' : m < 60 ? `hace ${m} min` : m < 1440 ? `hace ${Math.round(m / 60)} h` : `hace ${Math.round(m / 1440)} días`; };
+function renderUpdate() {
+  const u = STATE.update, box = $('#updBox');
+  renderFoot(u);
+  if (!u) { box.classList.add('hide'); return; }
+  if (u.status === 'actualizando' && u.version) startUpdateWait(u.version);
+  const busy = STATE.servers.some(s => ['en línea', 'iniciando', 'reparando', 'deteniendo', 'instalando'].includes(s.status));
+  const notes = l => l && l.length ? `<ul>${l.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : '';
+  let cls = '', html = '';
+  if (u.status === 'lista' && u.version) {
+    html = `<b>Hay una versión nueva de Servidor Home: ${esc(u.version)}</b> (tienes la ${esc(u.actual)}).${u.novedades && u.novedades.length ? ' Novedades:' : ''}${notes(u.novedades)}
+      <div class="row"><button class="btn sm primary" id="bUpdNow" ${busy ? 'disabled' : ''}>Actualizar ahora</button>
+      <span class="muted small">${busy ? 'Para actualizar ahora, apaga los servidores. Si no, se instala sola cuando no haya ninguno encendido y cierres esta ventana.'
+        : 'Tarda unos segundos. Si no, se instala sola la próxima vez que abras Servidor Home.'}</span></div>`;
+  } else if (u.instalada) {
+    cls = 'ok';
+    html = `<b>Servidor Home se actualizó a la versión ${esc(u.instalada.version)}.</b>${u.instalada.novedades && u.instalada.novedades.length ? ' Novedades:' : ''}${notes(u.instalada.novedades)}
+      <div class="row"><button class="btn sm" id="bUpdSeen">Entendido</button></div>`;
+  } else if (u.fallo) {
+    cls = 'err';
+    html = `<b>La versión ${esc(u.fallo.version)} no arrancó bien</b>, así que Servidor Home volvió solo a la ${esc(u.fallo.volvio || u.actual)}. Esa versión no se vuelve a instalar; la siguiente se instala sola.
+      <div class="row"><button class="btn sm" id="bUpdSeen">Entendido</button></div>`;
+  }
+  const key = cls + html;
+  if (box.dataset.key !== key) {
+    box.dataset.key = key; box.className = 'upd ' + cls; box.innerHTML = html;
+    const seen = $('#bUpdSeen');
+    if (seen) seen.onclick = async () => { await act(() => api('actualizar/visto', { method: 'POST' })); refresh(); };
+    const now = $('#bUpdNow');
+    if (now) now.onclick = async () => {
+      now.disabled = true;
+      const r = await act(() => api('actualizar', { method: 'POST' }));
+      if (r) startUpdateWait(u.version); else now.disabled = false;
+    };
+  }
+  box.classList.toggle('hide', !html);
+}
+function renderFoot(u) {
+  const f = $('#appFoot');
+  const key = JSON.stringify([INFO && INFO.version, u && [u.enabled, u.auto, u.status, u.error, u.revisada && Math.floor(Date.now() / 60000)]]);
+  if (f.dataset.key === key) return;
+  f.dataset.key = key;
+  let h = `<span>Servidor Home ${esc(INFO ? INFO.version : '')}</span>`;
+  if (u && u.enabled) {
+    const st = u.status === 'buscando' ? 'buscando versiones nuevas…' : u.status === 'descargando' ? 'descargando la versión nueva…'
+      : u.status === 'error' ? (u.error || 'no se pudo revisar si hay versiones nuevas') : u.revisada ? 'revisado ' + fmtAgo(u.revisada) : '';
+    h += `<label title="Instala solo las versiones nuevas cuando no hay servidores encendidos"><input type="checkbox" id="updAuto" ${u.auto ? 'checked' : ''}> Actualizar automáticamente</label>`
+      + (st ? `<span>${esc(st)}</span>` : '') + '<button class="link" id="updCheck">Buscar actualizaciones</button>';
+  }
+  f.innerHTML = h;
+  const auto = $('#updAuto');
+  if (auto) auto.onchange = async () => { await act(() => api('actualizar', { method: 'PUT', json: { auto: auto.checked } })); refresh(); };
+  const chk = $('#updCheck');
+  if (chk) chk.onclick = async () => { await act(() => api('actualizar/buscar', { method: 'POST' }), 'Buscando versiones nuevas…'); setTimeout(refresh, 1500); };
+}
+function startUpdateWait(v) {
+  if (UPD_WAIT) return;
+  UPD_WAIT = v;
+  const ov = document.createElement('div');
+  ov.className = 'updating'; ov.id = 'updOverlay';
+  ov.innerHTML = `<div><span class="spinner" style="width:30px;height:30px;border-width:3px"></span><h2>Actualizando Servidor Home a la versión ${esc(v)}…</h2>
+    <p class="muted">Vuelve en unos segundos. No cierres esta ventana.</p></div>`;
+  document.body.appendChild(ov);
+  const t0 = Date.now(); let down = false;
+  const tick = async () => {
+    try {
+      const info = await api('info', { timeout: 3000 });
+      if (info.version === v || (down && info.version)) { reloadHere(); return; }
+    } catch { down = true; }
+    if (Date.now() - t0 > 120000) ov.querySelector('p').textContent = 'Está tardando más de lo normal. Si no vuelve, abre Servidor Home con el acceso directo.';
+    setTimeout(tick, 1000);
+  };
+  setTimeout(tick, 1500);
+}
+
+/* ---------------- playit.gg ---------------- */
+function renderPlayit() {
+  const p = STATE.playit || {}, box = $('#playitBox');
+  if (!box) return;
+  const key = JSON.stringify([p.phase, p.message, p.error, p.claim_url, p.address, p.connected, p.tunnel_error, p.notices, p.pending, p.supported]);
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
+  let h = '';
+  if (p.supported === false) {
+    h = '<span class="muted">La conexión automática con playit.gg funciona en Linux.</span>';
+  } else if (p.phase === 'desvinculado') {
+    h = `<div>Tus amigos entran desde cualquier lugar con una dirección fija, sin abrir puertos del router.</div>
+         <div class="row" style="margin-top:10px"><button class="btn primary" id="bPlayit">Conectar con playit.gg</button><span class="muted small">Gratis. Te pedirá entrar o crear una cuenta.</span></div>`;
+  } else if (p.phase === 'vinculando') {
+    h = `<ol class="steps"><li>Abre el enlace y entra a tu cuenta de playit.gg (o crea una gratis).</li><li>Aprueba el programa <b>Servidor Home</b>.</li><li>Vuelve aquí: la dirección aparece sola.</li></ol>
+         <div class="row" style="margin-top:10px"><a class="btn primary" href="${esc(p.claim_url)}" target="_blank" rel="noopener">Abrir playit.gg ↗</a><button class="btn sm" id="bPlayitCancel">Cancelar</button></div>
+         <div class="muted small" style="margin-top:8px"><span class="spinner"></span> ${esc(p.message || 'Esperando aprobación…')}</div>`;
+  } else if (p.phase === 'listo' && p.address) {
+    h = `<div class="row"><span class="address big" id="netAddr">${esc(p.address)}</span><button class="btn sm primary" data-copy="#netAddr">Copiar</button></div>
+         <div class="small" style="margin-top:6px">${p.connected ? '<span style="color:var(--green)">● Conectado</span>' : '<span class="spinner"></span> Conectando el túnel…'} · <span class="muted">Esta dirección es fija: no cambia aunque cambie la IP de tu casa.</span></div>`;
+    if (!p.connected && p.agent_error) h += `<div class="warnbox">playit todavía no logra conectarse: ${esc(p.agent_error)}<br><span class="muted">Se reintenta solo. Revisa que este PC tenga internet.</span></div>`;
+  } else if (p.phase === 'error') {
+    h = `<div style="color:var(--red)">${esc(p.error)}</div><div class="row" style="margin-top:8px"><button class="btn sm" id="bPlayitRetry">Reintentar</button><button class="btn sm danger" id="bPlayitUnlink">Desvincular</button></div>`;
+  } else {
+    h = `<div><span class="spinner"></span> ${esc(p.message || 'Conectando con playit.gg…')}</div>`;
+    if (p.tunnel_error) h += `<div class="warnbox">${esc(p.tunnel_error)} <a href="https://playit.gg/account/tunnels" target="_blank" rel="noopener">Abrir playit.gg ↗</a>
+        <div class="row" style="margin-top:8px"><button class="btn sm" id="bPlayitRetry">Ya lo creé / Reintentar</button>${p.mode === 'self-managed' ? '<button class="btn sm" id="bPlayitWeb">Prefiero crearla en la web</button>' : ''}</div></div>`;
+  }
+  for (const n of (p.notices || [])) h += `<div class="warnbox">${esc(n.message)}${n.link ? ` <a href="${esc(n.link)}" target="_blank" rel="noopener">Resolver ↗</a>` : ''}</div>`;
+  if (p.phase !== 'desvinculado' && p.supported !== false)
+    h += `<details style="margin-top:8px"><summary class="small">Detalles de playit</summary><div class="console mini" id="playitLog"></div>
+          <div class="row" style="margin-top:8px"><a class="btn sm" href="https://playit.gg/account" target="_blank" rel="noopener">Mi cuenta de playit ↗</a>${p.phase !== 'error' ? '<button class="btn sm danger" id="bPlayitUnlink">Desvincular</button>' : ''}</div></details>`;
+  const openDetails = box.querySelector('details')?.open;
+  box.innerHTML = h;
+  if (openDetails && box.querySelector('details')) { box.querySelector('details').open = true; PLAYIT_SEQ = 0; }
+  const on = (id, fn) => { const el = box.querySelector(id); if (el) el.onclick = fn; };
+  on('#bPlayit', async () => { await act(() => api('playit/setup', { method: 'POST' })); refresh(); });
+  on('#bPlayitCancel', async () => { await act(() => api('playit/cancel', { method: 'POST' })); refresh(); });
+  on('#bPlayitRetry', async () => { await act(() => api('playit/retry', { method: 'POST' })); refresh(); });
+  on('#bPlayitWeb', async () => { if (!(await ask('Se vinculará de nuevo este PC con playit.gg para que crees la dirección desde su página. ¿Seguir?', 'Seguir'))) return; await act(() => api('playit/setup', { method: 'POST', json: { mode: 'assignable' } })); refresh(); });
+  on('#bPlayitUnlink', async () => { if (!(await ask('¿Desvincular de playit.gg? La dirección seguirá en tu cuenta de playit, pero este PC dejará de usarla.', 'Desvincular', 'Cancelar', true))) return; await act(() => api('playit/unlink', { method: 'POST' })); refresh(); });
+}
+async function pollPlayitLog() {
+  if (document.hidden) return;
+  if (CLOSED) return;
+  const el = $('#playitLog'); if (!el || !el.closest('details').open) return;
+  try {
+    const r = await api('playit/log?since=' + PLAYIT_SEQ);
+    if (PLAYIT_SEQ === 0) el.innerHTML = '';
+    appendLines(el, r.lines); PLAYIT_SEQ = r.last;
+  } catch { }
+}
+
+/* ---------------- consola ---------------- */
+function appendLines(box, lines) {
+  if (!lines.length) return;
+  const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+  const frag = document.createDocumentFragment();
+  for (const l of lines) {
+    const d = document.createElement('div');
+    let k = l.k;
+    if (k === 'out' && /\b(WARN|WARNING)\b/.test(l.s)) k = 'warn';
+    if (k === 'out' && /\b(ERROR|FATAL)\b|Exception/.test(l.s)) k = 'err';
+    d.className = 'k-' + k;
+    d.innerHTML = `<span class="t">${l.t}</span>${esc(l.s)}`;
+    frag.appendChild(d);
+  }
+  box.appendChild(frag);
+  while (box.childNodes.length > 3000) box.removeChild(box.firstChild);
+  if (atBottom) box.scrollTop = box.scrollHeight;
+}
+async function pollLog() {
+  if (document.hidden) return;
+  if (!CUR || CLOSED) return;
+  const id = CUR;
+  try {
+    const r = await api(`servers/${id}/log?since=${LOGSEQ}`, { timeout: 8000 });
+    if (id !== CUR) return;
+    const first = LOGSEQ === 0;
+    appendLines($('#console'), r.lines);
+    if (first) $('#console').scrollTop = $('#console').scrollHeight;
+    LOGSEQ = r.last;
+  } catch { }
+}
+async function sendCmd() {
+  const v = $('#cmd').value.trim(); if (!v) return;
+  HIST.unshift(v); hIdx = -1; $('#cmd').value = '';
+  await act(() => api(`servers/${CUR}/command`, { method: 'POST', json: { command: v } }));
+  pollLog();
+}
+$('#bSend').onclick = sendCmd;
+$('#cmd').onkeydown = e => {
+  if (e.key === 'Enter') sendCmd();
+  else if (e.key === 'ArrowUp' && HIST.length) { hIdx = Math.min(hIdx + 1, HIST.length - 1); $('#cmd').value = HIST[hIdx]; e.preventDefault(); }
+  else if (e.key === 'ArrowDown') { hIdx = Math.max(hIdx - 1, -1); $('#cmd').value = hIdx < 0 ? '' : HIST[hIdx]; }
+};
+
+/* ---------------- pestañas ---------------- */
+function setTab(t) {
+  TAB = t;
+  $$('.tab').forEach(el => el.classList.toggle('act', el.dataset.t === t));
+  $$('section[data-p]').forEach(el => el.classList.toggle('hide', el.dataset.p !== t));
+  loadTab();
+}
+$$('.tab').forEach(el => el.onclick = () => setTab(el.dataset.t));
+function loadTab() {
+  if (!CUR) return;
+  if (TAB === 'settings') loadSettings();
+  if (TAB === 'addons') loadAddons();
+  if (TAB === 'backups') loadBackups();
+  if (TAB === 'players') { $('#pList').dataset.key = ''; loadPlayers(); }
+  if (TAB === 'console') setTimeout(() => { const b = $('#console'); b.scrollTop = b.scrollHeight; }, 0);
+}
+
+/* ---------------- ajustes ---------------- */
+let DETAIL = null;
+function setupRam(input, out, value, hintEl) {
+  const total = INFO?.ram_total_mb || 8192;
+  input.max = Math.max(2048, Math.floor(total * 0.85 / 512) * 512);
+  input.value = value;
+  const upd = () => {
+    out.textContent = fmtMB(+input.value);
+    if (hintEl) hintEl.textContent = `Tu PC tiene ${fmtMB(total)}.` + (+input.value > total * 0.7 ? ' Deja algo libre para el sistema (y para jugar, si juegas en este mismo PC).' : '');
+  };
+  input.oninput = upd; upd();
+}
+async function loadSettings() {
+  const d = await act(() => api(`servers/${CUR}`)); if (!d) return;
+  DETAIL = d; const p = d.properties;
+  $('#sName').value = d.name;
+  $('#sMax').value = p['max-players'] || 20;
+  $('#sGamemode').value = p.gamemode || 'survival';
+  $('#sDifficulty').value = p.difficulty || 'easy';
+  const ml = String(p.motd || '').split('\\n'); $('#sMotd').value = ml[0] || ''; $('#sMotd2').value = ml.slice(1).join(' ');
+  renderLook();
+  $('#sOffline').checked = p['online-mode'] === 'false';
+  $('#sWhitelist').checked = p['white-list'] === 'true';
+  $('#sPvp').checked = p.pvp !== 'false';
+  $('#sAutoFix').checked = d.auto_fix !== false;
+  $('#sJavaOpt').checked = d.java_opt !== false;
+  $('#perfMods').classList.toggle('hide', !d.perf_mods);
+  $('#perfModsText').textContent = '— ' + (d.type === 'forge' ? 'ModernFix y FerriteCore' : 'Lithium, FerriteCore y ModernFix') +
+    ': el servidor calcula más rápido y usa menos memoria, sin cambiar cómo se juega. Se descargan de Modrinth para esta versión.';
+  $('#perfMsg').textContent = '';
+  setupRam($('#sRam'), $('#sRamOut'), d.ram_mb, $('#sRamHint'));
+  $('#sPort').value = d.port; $('#sJvm').value = d.jvm_args || '';
+  $('#allProps').innerHTML = Object.entries(p).map(([k, v]) => `<tr><td class="muted" style="font-family:var(--mono);font-size:12.5px;width:42%">${esc(k)}</td><td><input type="text" data-all="${esc(k)}" value="${esc(v)}"></td></tr>`).join('')
+    || '<tr><td class="muted">Aparecen después del primer encendido.</td></tr>';
+  $('#sEula').checked = d.eula; $('#eulaSec').classList.toggle('hide', d.eula);
+  $('#sPath').textContent = d.path;
+  $('#delConfirm').value = '';
+  mountVersionCard(d);
+}
+
+/* --- versión del servidor --- */
+let SPICK = null, NEWWORLD_TOUCHED = false;
+const versionText = (t, mc, lv) => `${TYPE_LABEL[t] || t}${lv ? ' ' + lv : ''} · Minecraft ${mc || '?'}`;
+function mountVersionCard(d) {
+  const h = d.version_history || [];
+  $('#verNow').textContent = 'Ahora: ' + versionText(d.type, d.mc_version, d.loader_version) + (h.length ? ` · antes: ${h[h.length - 1].de}` : '');
+  $('#verNewWorldWrap').classList.toggle('hide', !d.has_world);
+  $('#verNewWorld').checked = false; NEWWORLD_TOUCHED = false;
+  $('#verWarn').innerHTML = '';
+  SPICK = versionPicker($('#sPick'), { type: d.type, mc: d.mc_version, loader: d.loader_version, onChange: versionCardChanged, trusted: d.mc_version });
+  updateVersionButton();
+}
+function versionCardChanged(v) {
+  const d = DETAIL; if (!d || !SPICK) return;
+  const mcChange = v.mc_version !== d.mc_version;
+  const older = mcChange && isOlder(SPICK.versions(), d.mc_version, v.mc_version);
+  const warns = [];
+  if (older && d.has_world) warns.push(`Estás bajando de ${d.mc_version} a ${v.mc_version}. Un mundo de una versión más nueva puede no abrir o dañarse en una más antigua: lo mejor es empezar con un mundo nuevo (el actual queda guardado).`);
+  if (mcChange && d.addons_dir === 'mods' && d.mods_active) warns.push(`Este servidor tiene ${d.mods_active} mods para Minecraft ${d.mc_version}. Con ${v.mc_version} lo más probable es que no funcionen: tendrás que cambiarlos por sus versiones para ${v.mc_version} en la pestaña Mods.`);
+  if (mcChange && d.addons_dir === 'plugins' && d.mods_active) warns.push(`Revisa que tus ${d.mods_active} plugins funcionen en Minecraft ${v.mc_version}.`);
+  $('#verWarn').innerHTML = warns.map(w => `<div class="warnbox">${esc(w)}</div>`).join('');
+  if (!NEWWORLD_TOUCHED) $('#verNewWorld').checked = !!(older && d.has_world);
+  updateVersionButton();
+}
+$('#verNewWorld').onchange = () => { NEWWORLD_TOUCHED = true; updateVersionButton(); };
+function updateVersionButton() {
+  const s = cur(), d = DETAIL, b = $('#bVersion');
+  if (!s || !d || !SPICK || d.id !== s.id) return;
+  const v = SPICK.get();
+  const busy = ['en línea', 'iniciando', 'deteniendo', 'instalando'].includes(s.status);
+  const same = v.mc_version === d.mc_version && (!v.loader_version || v.loader_version === d.loader_version) && !$('#verNewWorld').checked;
+  b.disabled = busy || same;
+  $('#verOff').textContent = busy ? (s.status === 'instalando' ? 'Instalando…' : 'Apaga el servidor para cambiar la versión.') : (same ? 'Elige otra versión para cambiarla.' : '');
+}
+$('#bVersion').onclick = async () => {
+  const d = DETAIL; if (!SPICK || !SPICK.valid()) return;
+  const v = SPICK.get(), nw = $('#verNewWorld').checked && d.has_world;
+  const text = `«${d.name}» pasará a ${versionText(d.type, v.mc_version, v.loader_version)}.\n\n` +
+    (d.has_world ? 'Antes se hace un respaldo del mundo (queda en la pestaña Respaldos).' + (nw ? ' Después empieza con un mundo nuevo; el actual queda guardado aparte.' : '') + '\n\n' : '') +
+    `Tus amigos tendrán que entrar con Minecraft ${v.mc_version}. ¿Cambiar la versión?`;
+  if (!(await ask(text, 'Cambiar versión', 'Cancelar'))) return;
+  const r = await act(() => api(`servers/${CUR}/version`, { method: 'POST', json: { mc_version: v.mc_version, loader_version: v.loader_version, new_world: nw } }));
+  if (r) { toast('Cambiando de versión… el avance se ve en la barra de arriba.'); await refresh(); setTab('console'); pollLog(); }
+};
+$('#bSaveBasic').onclick = async () => {
+  const props = {
+    'max-players': $('#sMax').value, gamemode: $('#sGamemode').value, difficulty: $('#sDifficulty').value,
+    motd: motdValue(), 'online-mode': !$('#sOffline').checked, 'white-list': $('#sWhitelist').checked,
+    'enforce-whitelist': $('#sWhitelist').checked, pvp: $('#sPvp').checked,
+  };
+  const ok1 = await act(() => api(`servers/${CUR}/properties`, { method: 'PUT', json: { properties: props } }));
+  const ok2 = await act(() => api(`servers/${CUR}/settings`, { method: 'PUT', json: { name: $('#sName').value, ram_mb: +$('#sRam').value, auto_fix: $('#sAutoFix').checked } }));
+  if (ok1 && ok2) toast(cur()?.status === 'en línea' ? 'Guardado. Se aplica la próxima vez que enciendas el servidor.' : 'Guardado.');
+  refresh();
+};
+$('#bSavePerf').onclick = async () => {
+  const r = await act(() => api(`servers/${CUR}/settings`, { method: 'PUT', json: { java_opt: $('#sJavaOpt').checked } }));
+  if (r) toast(cur()?.status === 'en línea' ? 'Guardado. Se aplica la próxima vez que enciendas el servidor.' : 'Guardado.');
+};
+$('#bPerfMods').onclick = async () => {
+  const s = cur(); if (!s) return;
+  if (['en línea', 'iniciando', 'reparando', 'deteniendo'].includes(s.status)) return toast('Apaga el servidor antes de agregar mods.', true);
+  if (!(await ask('Se agregarán al servidor los mods de rendimiento que le falten (se descargan de Modrinth). Si alguno no se lleva bien con el modpack, la app lo detecta al encender. ¿Seguir?', 'Agregar', 'Cancelar'))) return;
+  const b = $('#bPerfMods'); b.disabled = true; $('#perfMsg').textContent = 'Descargando…';
+  const r = await act(() => api(`servers/${CUR}/rendimiento`, { method: 'POST' }));
+  b.disabled = false; $('#perfMsg').textContent = r ? r.message : '';
+  if (r) toast(r.message); refresh();
+};
+$('#bSaveAdv').onclick = async () => {
+  await act(() => api(`servers/${CUR}/properties`, { method: 'PUT', json: { properties: { 'server-port': $('#sPort').value } } }));
+  await act(() => api(`servers/${CUR}/settings`, { method: 'PUT', json: { jvm_args: $('#sJvm').value } }), 'Guardado.');
+  refresh();
+};
+$('#bSaveAll').onclick = async () => {
+  const props = {}; $$('[data-all]').forEach(el => props[el.dataset.all] = el.value);
+  await act(() => api(`servers/${CUR}/properties`, { method: 'PUT', json: { properties: props } }), 'Propiedades guardadas.');
+  loadSettings();
+};
+$('#bEula').onclick = async () => {
+  if (!$('#sEula').checked) return toast('Marca la casilla para aceptar el EULA.', true);
+  await act(() => api(`servers/${CUR}/settings`, { method: 'PUT', json: { eula: true } }), 'EULA aceptado.'); loadSettings();
+};
+$('#bDelete').onclick = async () => {
+  const s = cur();
+  if ($('#delConfirm').value.trim() !== s.name) return toast('Escribe el nombre exacto del servidor para confirmar.', true);
+  const r = await act(() => api(`servers/${CUR}`, { method: 'DELETE' }), 'Servidor borrado.');
+  if (r) { CUR = null; setTab('console'); refresh(); }
+};
+/* ---------------- imagen y mensaje del servidor ---------------- */
+const MC_COLORS = { 0: '#000000', 1: '#0000AA', 2: '#00AA00', 3: '#00AAAA', 4: '#AA0000', 5: '#AA00AA', 6: '#FFAA00', 7: '#AAAAAA',
+  8: '#555555', 9: '#5555FF', a: '#55FF55', b: '#55FFFF', c: '#FF5555', d: '#FF55FF', e: '#FFFF55', f: '#FFFFFF' };
+const GRASS_SVG = '<svg viewBox="0 0 16 16"><rect width="16" height="16" fill="#5a8f29"/><rect y="5" width="16" height="11" fill="#795533"/><rect y="5" width="16" height="2" fill="#6aa531"/><rect x="2" y="9" width="2" height="2" fill="#634329"/><rect x="9" y="11" width="2" height="2" fill="#634329"/><rect x="12" y="8" width="2" height="2" fill="#8b6340"/></svg>';
+// «§a» y compañía: los códigos de color y formato de Minecraft, para ver el mensaje como en el juego
+function mcFormat(text) {
+  let out = '', color = MC_COLORS[7], st = { b: 0, i: 0, u: 0, s: 0 }, buf = '';
+  const flush = () => { if (buf) out += `<span class="${Object.keys(st).filter(k => st[k]).join(' ')}" style="color:${color}">${esc(buf)}</span>`; buf = ''; };
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '§' && i + 1 < text.length) {
+      const k = text[++i].toLowerCase(); flush();
+      if (MC_COLORS[k]) { color = MC_COLORS[k]; st = { b: 0, i: 0, u: 0, s: 0 }; }
+      else if (k === 'l') st.b = 1; else if (k === 'o') st.i = 1; else if (k === 'n') st.u = 1; else if (k === 'm') st.s = 1;
+      else if (k === 'r') { color = MC_COLORS[7]; st = { b: 0, i: 0, u: 0, s: 0 }; }
+      continue;
+    }
+    buf += c;
+  }
+  flush();
+  return out;
+}
+const motdValue = () => { const a = $('#sMotd').value.trim(), b = $('#sMotd2').value.trim(); return b ? `${a}\\n${b}` : a; };
+function renderLook() {
+  const s = cur(); if (!s) return;
+  $('#apName').textContent = s.name;
+  $('#apPlayers').textContent = `${s.players.length}/${s.max_players || 20}`;
+  $('#apMotd').innerHTML = mcFormat($('#sMotd').value) + '\n' + mcFormat($('#sMotd2').value);
+  const box = $('#apIcon'), src = s.icon ? `/api/servers/${s.id}/icono?v=${s.icon}` : '';
+  if (box.dataset.src !== src) { box.dataset.src = src; box.innerHTML = src ? `<img src="${src}" alt="Imagen del servidor">` : GRASS_SVG; }
+  $('#bIconDel').classList.toggle('hide', !s.icon);
+  $('#lookNote').textContent = ['en línea', 'iniciando'].includes(s.status) ? 'Los cambios se ven en la lista de servidores después de reiniciar el servidor.' : '';
+}
+let MOTD_FOCUS = null;
+$$('[data-motd]').forEach(el => { el.addEventListener('focus', () => MOTD_FOCUS = el); el.addEventListener('input', renderLook); });
+(function mountColors() {
+  const box = $('#mcColors');
+  for (const [k, c] of Object.entries(MC_COLORS)) box.insertAdjacentHTML('beforeend', `<button type="button" title="Color §${k}" data-mc="${k}" style="background:${c}"></button>`);
+  box.insertAdjacentHTML('beforeend', '<button type="button" class="t" data-mc="l" title="Negrita"><b>N</b></button><button type="button" class="t" data-mc="o" title="Cursiva"><i>C</i></button><button type="button" class="t" data-mc="r" title="Quitar colores desde aquí">Normal</button>');
+  box.onmousedown = e => { if (e.target.closest('[data-mc]')) e.preventDefault(); };     // que el cursor no salga del texto
+  box.onclick = e => {
+    const b = e.target.closest('[data-mc]'); if (!b) return;
+    const el = MOTD_FOCUS || $('#sMotd'), code = '§' + b.dataset.mc;
+    const a = el.selectionStart ?? el.value.length, z = el.selectionEnd ?? el.value.length;
+    el.value = el.value.slice(0, a) + code + el.value.slice(z); el.focus(); el.setSelectionRange(a + 2, a + 2);
+    renderLook();
+  };
+})();
+$('#bSaveLook').onclick = async () => {
+  const r = await act(() => api(`servers/${CUR}/properties`, { method: 'PUT', json: { properties: { motd: motdValue() } } }));
+  if (r) toast(['en línea', 'iniciando'].includes(cur()?.status) ? 'Guardado. Se ve en la lista de servidores después de reiniciar el servidor.' : 'Guardado.');
+};
+// La imagen se recorta al centro y se achica a 64×64 aquí mismo (Minecraft solo acepta ese tamaño)
+function toIcon(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => {
+      try {
+        const w = img.naturalWidth, h = img.naturalHeight;
+        if (!w || !h) throw new Error('No pude leer esa imagen.');
+        let side = Math.min(w, h), sx = (w - side) / 2, sy = (h - side) / 2, src = img;
+        while (side >= 256) {            // achicar de a la mitad se ve más nítido que de una vez
+          const half = Math.round(side / 2), c = document.createElement('canvas');
+          c.width = c.height = half;
+          const g = c.getContext('2d'); g.imageSmoothingQuality = 'high';
+          g.drawImage(src, sx, sy, side, side, 0, 0, half, half);
+          src = c; side = half; sx = sy = 0;
+        }
+        const c = document.createElement('canvas'); c.width = c.height = 64;
+        const g = c.getContext('2d');
+        g.imageSmoothingEnabled = side > 64;          // una imagen chica (pixel art) se agranda sin difuminarse
+        g.imageSmoothingQuality = 'high';
+        g.drawImage(src, sx, sy, side, side, 0, 0, 64, 64);
+        c.toBlob(b => b ? resolve(b) : reject(new Error('No pude convertir la imagen.')), 'image/png');
+      } catch (e) { reject(e); } finally { URL.revokeObjectURL(url); }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('No pude abrir esa imagen. Prueba con un PNG o JPG.')); };
+    img.src = url;
+  });
+}
+async function uploadIcon(file) {
+  if (!file || !CUR) return;
+  if (file.type && !file.type.startsWith('image/')) return toast('Elige una imagen (PNG, JPG, GIF…).', true);
+  let blob;
+  try { blob = await toIcon(file); } catch (e) { return toast(e.message, true); }
+  const r = await act(() => api(`servers/${CUR}/icono`, { method: 'PUT', body: blob }));
+  if (r) { toast(['en línea', 'iniciando'].includes(r.status) ? 'Imagen guardada. Se ve en la lista de servidores después de reiniciar el servidor.' : 'Imagen guardada.'); await refresh(); renderLook(); }
+}
+$('#iconIn').onchange = e => { uploadIcon(e.target.files[0]); e.target.value = ''; };
+$('#apEntry').onclick = () => $('#iconIn').click();
+setupDrop($('#apEntry'), files => uploadIcon(files[0]));
+$('#bIconDel').onclick = async () => {
+  if (!(await ask('¿Quitar la imagen del servidor? Vuelve a verse la imagen normal de Minecraft.', 'Quitar', 'Cancelar', true))) return;
+  const r = await act(() => api(`servers/${CUR}/icono`, { method: 'DELETE' }), 'Imagen quitada.');
+  if (r) { await refresh(); renderLook(); }
+};
+
+/* ---------------- mods para los amigos ---------------- */
+function renderShare(s) {
+  const row = $('#shareRow'), box = $('#shareBox');
+  const show = s.addons_dir === 'mods';
+  row.classList.toggle('hide', !show);
+  $('#shareModsRow').classList.toggle('hide', !show);
+  if (!show) return;
+  const sh = s.share, key = JSON.stringify([s.id, sh]);
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
+  let h;
+  if (sh && sh.estado === 'armando') {
+    h = `<div><span class="spinner"></span> Armando el zip… <b>${sh.pct || 0}%</b></div><div class="bar" style="margin:8px 0 6px"><div style="width:${Math.max(2, sh.pct || 0)}%"></div></div><div class="muted small">${esc(sh.detalle || '')}</div>`;
+  } else if (sh && sh.estado === 'listo') {
+    h = `<div>✓ Listo: <b>${esc(sh.archivo)}</b> <span class="muted small">(${fmtSize(sh.tamano)}${sh.mods ? ` · ${sh.mods} mods` : ''})</span></div>
+      <div class="row" style="margin-top:8px"><a class="btn sm primary" id="bShareDl" href="/api/servers/${encodeURIComponent(s.id)}/compartir?t=${sh.t || 0}" download>Descargar el zip</a>
+      <button class="btn sm" id="bShareOpen">Abrir carpeta</button><button class="btn sm" id="bShare">Armar de nuevo</button></div>
+      <div class="muted small" style="margin-top:6px">También quedó guardado en <code>${esc(sh.carpeta || '')}</code>, con un LEEME con los pasos para instalarlos. Si pesa mucho para Discord o WhatsApp, súbelo a Google Drive y comparte el enlace.</div>`;
+  } else {
+    h = (sh && sh.estado === 'error' ? `<div class="warnbox" style="margin:0 0 8px">${esc(sh.error)}</div>` : '') +
+      '<div class="row"><button class="btn sm primary" id="bShare">Compartir mods con amigos</button><span class="muted small">Arma un .zip con los mods que tus amigos necesitan en su juego (sin los que son solo del servidor), con un LEEME de cómo instalarlos.</span></div>';
+  }
+  box.innerHTML = h;
+  const b = $('#bShare'); if (b) b.onclick = startShare;
+  const o = $('#bShareOpen'); if (o) o.onclick = () => act(() => api(`servers/${s.id}/compartir/abrir`, { method: 'POST' }));
+}
+async function startShare() {
+  const s = cur(); if (!s) return;
+  const r = await act(() => api(`servers/${s.id}/compartir`, { method: 'POST' }));
+  if (r) { await refresh(); $('#shareRow').scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+}
+$('#bShareMods').onclick = startShare;
+
+/* ---------------- mods / plugins ---------------- */
+async function loadAddons() {
+  const list = await act(() => api(`servers/${CUR}/addons`)); if (!list) return;
+  ADDONS = list; renderAddons();
+}
+function renderAddons() {
+  const f = $('#addonFilter').value.trim().toLowerCase();
+  const list = ADDONS.filter(a => !f || a.name.toLowerCase().includes(f));
+  const on = ADDONS.filter(a => a.enabled).length;
+  $('#addonCount').textContent = `${on} activos` + (ADDONS.length - on ? ` · ${ADDONS.length - on} desactivados` : '');
+  $('#addonList').innerHTML = list.map(a => `<tr>
+      <td><span style="${a.enabled ? '' : 'opacity:.5'}">${esc(a.name.replace(/\.disabled$/, ''))}${a.enabled ? '' : ' <span class="tag">desactivado</span>'}</span>${a.why ? `<div class="muted small why">${esc(a.why)}</div>` : ''}</td>
+      <td class="muted" style="width:90px">${fmtSize(a.size)}</td>
+      <td style="text-align:right;width:210px;white-space:nowrap"><button class="btn sm" data-toggle="${esc(a.name)}">${a.enabled ? 'Desactivar' : 'Activar'}</button>
+      <button class="btn sm danger" data-del="${esc(a.name)}">Quitar</button></td></tr>`).join('')
+    || `<tr><td class="muted">${ADDONS.length ? 'Nada coincide con la búsqueda.' : 'Todavía no hay archivos.'}</td></tr>`;
+  $$('[data-toggle]').forEach(b => b.onclick = async () => { await act(() => api(`servers/${CUR}/addons?name=${encodeURIComponent(b.dataset.toggle)}`, { method: 'PUT' })); loadAddons(); refresh(); });
+  $$('[data-del]').forEach(b => b.onclick = async () => { if (!(await ask('¿Quitar ' + b.dataset.del + '?', 'Quitar', 'Cancelar', true))) return; await act(() => api(`servers/${CUR}/addons?name=${encodeURIComponent(b.dataset.del)}`, { method: 'DELETE' })); loadAddons(); refresh(); });
+}
+$('#addonFilter').oninput = renderAddons;
+async function uploadAddons(files) {
+  for (const f of files) await act(() => api(`servers/${CUR}/addons?name=${encodeURIComponent(f.name)}`, { method: 'POST', body: f }), 'Agregado ' + f.name);
+  loadAddons(); refresh();
+}
+setupDrop($('#drop'), files => uploadAddons(files));
+$('#fileIn').onchange = e => { uploadAddons(e.target.files); e.target.value = ''; };
+function setupDrop(el, cb) {
+  el.ondragover = e => { e.preventDefault(); el.classList.add('over'); };
+  el.ondragleave = () => el.classList.remove('over');
+  el.ondrop = e => { e.preventDefault(); el.classList.remove('over'); if (e.dataTransfer.files.length) cb(e.dataTransfer.files); };
+}
+
+/* ---------------- respaldos ---------------- */
+async function loadBackups() {
+  const list = await act(() => api(`servers/${CUR}/backups`)); if (!list) return;
+  $('#backupList').innerHTML = list.map(b => `<tr><td>${esc(b.name)}</td><td class="muted" style="width:90px">${fmtSize(b.size)}</td>
+     <td style="text-align:right;width:200px;white-space:nowrap"><a class="btn sm" href="/api/servers/${CUR}/backups/${encodeURIComponent(b.name)}" download>Descargar</a>
+     <button class="btn sm danger" data-bdel="${esc(b.name)}">Borrar</button></td></tr>`).join('')
+    || '<tr><td class="muted">Sin respaldos todavía.</td></tr>';
+  $$('[data-bdel]').forEach(b => b.onclick = async () => { if (!(await ask('¿Borrar ' + b.dataset.bdel + '?', 'Borrar', 'Cancelar', true))) return; await act(() => api(`servers/${CUR}/backups/${encodeURIComponent(b.dataset.bdel)}`, { method: 'DELETE' })); loadBackups(); });
+}
+$('#bBackup').onclick = async () => {
+  $('#bBackup').disabled = true;
+  await act(() => api(`servers/${CUR}/backups`, { method: 'POST' }), 'Respaldo creado.');
+  $('#bBackup').disabled = false; loadBackups();
+};
+
+/* ---------------- selector de versión ---------------- */
+// Escribes la versión (ej. 1.21.11) o la eliges de la lista; atajos a las más usadas; snapshots opcionales.
+const VCACHE = {};
+const POPULAR = ['1.21.11', '1.21.1', '1.20.1', '1.19.2', '1.18.2', '1.16.5', '1.12.2', '1.8.9'];
+function versionPicker(root, { type, mc, loader, onChange, trusted } = {}) {
+  // trusted: la versión que ya tiene el servidor o que trae el modpack (se acepta aunque no esté en la lista)
+  root.innerHTML = `<div class="grid">
+      <div class="f"><span>Versión de Minecraft</span>
+        <div class="vp-box"><input type="text" class="vp-input" autocomplete="off" spellcheck="false" placeholder="Escribe o elige, ej. 1.21.11" aria-label="Versión de Minecraft">
+        <button type="button" class="vp-open" tabindex="-1" title="Ver todas las versiones">▼</button><div class="vp-list hide" role="listbox"></div></div></div>
+      <label class="f vp-lwrap hide"><span class="vp-lname">Versión del loader</span><select class="vp-loader"></select></label>
+    </div>
+    <div class="vp-chips"></div>
+    <label class="check small" style="margin-top:10px"><input type="checkbox" class="vp-snap"><div>Mostrar snapshots y versiones de prueba</div></label>
+    <div class="vp-msg muted"></div>`;
+  const q = sel => root.querySelector(sel);
+  const inp = q('.vp-input'), list = q('.vp-list'), chips = q('.vp-chips'), snap = q('.vp-snap');
+  const lsel = q('.vp-loader'), lwrap = q('.vp-lwrap'), msg = q('.vp-msg');
+  let T = type, VERS = [], shown = [], hl = -1, selected = mc || '', wantLoader = loader || null;
+  let dirty = false, vtok = 0, ltok = 0, autoSnap = false, quietFocus = false;
+  const changed = () => onChange && onChange(api_());
+
+  async function loadVersions() {
+    const key = T + (snap.checked ? ':s' : ''), my = ++vtok;
+    msg.className = 'vp-msg muted'; msg.innerHTML = '<span class="spinner"></span> Cargando versiones…';
+    try { VERS = VCACHE[key] || (VCACHE[key] = await api(`versions?type=${T}${snap.checked ? '&snapshots=1' : ''}`)); }
+    catch (e) {
+      if (my !== vtok) return;
+      VERS = []; inp.value = selected; chips.innerHTML = '';
+      msg.className = 'vp-msg err'; msg.textContent = 'No pude cargar la lista de versiones (¿sin internet?). Puedes escribir la versión igual.';
+      return loadLoaders();
+    }
+    if (my !== vtok) return;
+    if (selected && !VERS.some(v => v.id === selected) && !snap.checked && !autoSnap && /snapshot|pre|rc|w\d/i.test(selected)) {
+      autoSnap = true; snap.checked = true; return loadVersions();     // la versión actual es una snapshot
+    }
+    if (!selected) selected = (VERS.find(v => v.latest) || VERS[0] || {}).id || '';
+    inp.value = selected;
+    renderChips(); validate(); loadLoaders();
+  }
+  async function loadLoaders() {
+    const has = LOADER_TYPES.includes(T);
+    lwrap.classList.toggle('hide', !has);
+    if (!has) return changed();
+    q('.vp-lname').textContent = `Versión de ${TYPE_LABEL[T]}`;
+    const my = ++ltok, mcv = selected;
+    lsel.innerHTML = '<option>Cargando…</option>'; lsel.disabled = true;
+    try {
+      const l = await api(`loaders?type=${T}&mc=${encodeURIComponent(mcv)}`);
+      if (my !== ltok) return;
+      lsel.innerHTML = l.map(v => `<option value="${esc(v.id)}">${esc(v.label)}</option>`).join('') || '<option value="">(no hay para esta versión)</option>';
+      const pick = (wantLoader && l.find(v => v.id === wantLoader)) || l.find(v => v.recommended) || l[0];
+      if (pick) lsel.value = pick.id;
+    } catch {
+      if (my !== ltok) return;
+      lsel.innerHTML = `<option value="${esc(wantLoader || '')}">${esc(wantLoader || 'la recomendada')}</option>`;
+    }
+    lsel.disabled = false; changed();
+  }
+  function renderChips() {
+    const ids = new Set(VERS.map(v => v.id)), latest = VERS.find(v => v.latest), pop = [];
+    if (latest) pop.push({ id: latest.id, tag: 'la más nueva' });
+    for (const p of POPULAR) if (ids.has(p) && !pop.some(x => x.id === p)) pop.push({ id: p });
+    chips.innerHTML = pop.length ? '<span class="muted small">Más usadas:</span>' + pop.slice(0, 8).map(c =>
+      `<button type="button" class="vp-chip ${c.id === selected ? 'act' : ''}" data-v="${esc(c.id)}">${esc(c.id)}${c.tag ? ` <span class="muted">· ${c.tag}</span>` : ''}</button>`).join('') : '';
+    chips.querySelectorAll('[data-v]').forEach(b => b.onclick = () => choose(b.dataset.v));
+  }
+  const isTrusted = () => trusted && selected === trusted && T === type;
+  function validate() {
+    if (!VERS.length) return true;
+    const v = VERS.find(x => x.id === selected);
+    if (!v && isTrusted()) {
+      msg.className = 'vp-msg muted'; msg.textContent = `Tus amigos tienen que entrar con Minecraft ${selected}.`;
+      return true;
+    }
+    if (!v) {
+      msg.className = 'vp-msg err';
+      msg.textContent = selected ? `No encontré la versión «${selected}» para ${TYPE_LABEL[T]}.` + (snap.checked ? '' : ' Si es una snapshot, marca «Mostrar snapshots».') : 'Elige una versión.';
+      return false;
+    }
+    msg.className = 'vp-msg muted';
+    msg.textContent = (v.snapshot ? 'Versión de prueba: puede tener errores y dañar el mundo. ' : '') + `Tus amigos tienen que entrar con Minecraft ${v.id}.`;
+    return true;
+  }
+  function tagOf(v) { return v.latest ? 'la más nueva' : v.snapshot ? 'de prueba' : (v.label && v.label !== v.id ? v.label.replace(v.id, '').trim() : ''); }
+  function renderList(text) {
+    const t = (text || '').trim().toLowerCase();
+    let arr = VERS;
+    if (t && t !== selected.toLowerCase()) {
+      arr = VERS.filter(v => v.id.toLowerCase().startsWith(t)).concat(VERS.filter(v => !v.id.toLowerCase().startsWith(t) && v.id.toLowerCase().includes(t)));
+    }
+    shown = arr.slice(0, 500);
+    if (hl >= shown.length) hl = shown.length - 1;
+    list.innerHTML = shown.length ? shown.map((v, i) => `<div class="vp-item${v.id === selected ? ' sel' : ''}${i === hl ? ' hl' : ''}" data-i="${i}" role="option"><span>${esc(v.id)}</span><span class="vp-tag">${esc(tagOf(v))}</span></div>`).join('')
+      : `<div class="vp-item muted">${VERS.length ? 'Ninguna versión coincide' + (snap.checked ? '' : ' (prueba «Mostrar snapshots»)') : 'Sin lista: escribe la versión y presiona Enter'}</div>`;
+  }
+  function openList() {
+    if (!list.classList.contains('hide')) return;
+    hl = Math.max(0, VERS.findIndex(v => v.id === selected));
+    renderList(''); list.classList.remove('hide');
+    const it = list.querySelector('.hl'); if (it) list.scrollTop = it.offsetTop - list.clientHeight / 2 + 16;
+  }
+  function closeList() { list.classList.add('hide'); hl = -1; }
+  function moveHl(d) {
+    if (list.classList.contains('hide')) openList();
+    if (!shown.length) return;
+    hl = Math.min(shown.length - 1, Math.max(0, hl + d));
+    list.querySelectorAll('.vp-item').forEach((el, i) => el.classList.toggle('hl', i === hl));
+    const it = list.querySelector('.hl'); if (it) it.scrollIntoView({ block: 'nearest' });
+  }
+  function choose(v) {
+    v = String(v || '').trim(); closeList();
+    if (!v) { inp.value = selected; return; }
+    const exact = VERS.find(x => x.id.toLowerCase() === v.toLowerCase()); if (exact) v = exact.id;
+    const mcChanged = v !== selected;
+    selected = v; inp.value = v;
+    if (mcChanged) { dirty = true; wantLoader = null; }
+    renderChips(); validate();
+    if (mcChanged) loadLoaders(); else changed();
+  }
+  inp.onfocus = () => { inp.select(); if (quietFocus) quietFocus = false; else openList(); };
+  inp.oninput = () => { hl = 0; list.classList.remove('hide'); renderList(inp.value); };
+  inp.onkeydown = e => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); moveHl(1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); moveHl(-1); }
+    else if (e.key === 'Enter') {
+      e.preventDefault();
+      const typed = inp.value.trim(), exact = VERS.some(v => v.id.toLowerCase() === typed.toLowerCase());
+      choose(!exact && !list.classList.contains('hide') && shown[hl] ? shown[hl].id : typed);
+    }
+    else if (e.key === 'Escape') { if (!list.classList.contains('hide')) { e.preventDefault(); e.stopPropagation(); closeList(); inp.value = selected; } }
+    else if (e.key === 'Tab') closeList();
+  };
+  inp.onblur = () => setTimeout(() => { if (document.activeElement === inp) return; closeList(); if (inp.value.trim() !== selected) choose(inp.value); }, 120);
+  list.onmousedown = e => { e.preventDefault(); const it = e.target.closest('[data-i]'); if (it) choose(shown[+it.dataset.i].id); };
+  q('.vp-open').onmousedown = e => e.preventDefault();
+  q('.vp-open').onclick = () => { if (list.classList.contains('hide')) { inp.focus(); openList(); } else closeList(); };
+  snap.onchange = () => loadVersions();
+  lsel.onchange = () => { dirty = true; wantLoader = lsel.value; changed(); };
+  const api_ = () => ({
+    type: T, mc_version: selected,
+    loader_version: LOADER_TYPES.includes(T) ? (lsel.disabled ? wantLoader : (lsel.value || null)) : null,
+  });
+  loadVersions();
+  return {
+    get: api_,
+    get dirty() { return dirty; },
+    versions: () => VERS,
+    setType(t) { if (t === T) return; T = t; wantLoader = null; dirty = true; loadVersions(); },
+    valid() {
+      if (!selected) { toast('Elige la versión de Minecraft.', true); quietFocus = true; inp.focus(); return false; }
+      if (VERS.length && !VERS.some(v => v.id === selected) && !isTrusted()) { validate(); toast(msg.textContent, true); quietFocus = true; inp.focus(); return false; }
+      if (LOADER_TYPES.includes(T) && lsel.disabled) { toast('Espera a que carguen las versiones del loader.', true); return false; }
+      return true;
+    },
+  };
+}
+// ¿La versión b es más antigua que a? (las listas vienen de la más nueva a la más antigua)
+function isOlder(vers, a, b) {
+  const ia = vers.findIndex(v => v.id === a), ib = vers.findIndex(v => v.id === b);
+  return ia >= 0 && ib >= 0 && ib > ia;
+}
+
+/* ---------------- asistente ---------------- */
+function wStep(id) { ['#wSource', '#wProgress', '#wConfirm'].forEach(s => $(s).classList.toggle('hide', s !== id)); }
+function openWizard(src) {
+  $('#wizard').classList.add('open'); wStep('#wSource'); setSource(src || 'search');
+}
+function closeWizard() { $('#wizard').classList.remove('open'); clearInterval(IMPORT_TIMER); IMPORT = null; }
+$('#btnAdd').onclick = () => openWizard('search');
+$('#btnQuit').onclick = async () => {
+  const on = STATE.servers.filter(s => ['en línea', 'iniciando'].includes(s.status));
+  if (!(await ask(on.length ? `Se apagarán ${on.length} servidor(es) guardando el mundo y playit se desconectará. ¿Cerrar Servidor Home?` : '¿Cerrar Servidor Home?', 'Cerrar', 'Cancelar', on.length > 0))) return;
+  await api('shutdown', { method: 'POST' }).catch(() => { });
+  CLOSED = true; TIMERS.forEach(clearInterval); clearInterval(IMPORT_TIMER);
+  document.body.innerHTML = INFO && INFO.app_window
+    ? '<div class="welcome"><h2>Cerrando Servidor Home…</h2><p>Se apagan los servidores guardando el mundo. Esta ventana se cierra sola.</p></div>'
+    : '<div class="welcome"><h2>Servidor Home se cerró</h2><p>Puedes cerrar esta pestaña. Para volver a abrirla, usa el acceso directo «Servidor Home».</p></div>';
+};
+$$('#seg button').forEach(b => b.onclick = () => setSource(b.dataset.s));
+function setSource(s) {
+  $('#wSub').textContent = s === 'plain' ? 'Elige el tipo de servidor y la versión de Minecraft.' : s === 'search' ? 'Busca el modpack y la app arma el servidor con su pack de servidor.' : '¿De dónde sacamos el modpack?';
+  $$('#seg button').forEach(b => b.classList.toggle('act', b.dataset.s === s));
+  $$('[data-sp]').forEach(el => el.classList.toggle('hide', el.dataset.sp !== s));
+  $('#srcFoot').classList.toggle('hide', s === 'plain');
+  if (s === 'launcher') loadInstances();
+  if (s === 'search') initSearch();
+  if (s === 'plain') initPlain();
+}
+
+// --- buscar (Modrinth / CurseForge) ---
+let PSRC = 'modrinth', PQUERY = null, PTOK = 0, CFKEY = null;
+const fmtNum = n => n >= 1e6 ? (n / 1e6).toFixed(1).replace('.0', '') + ' M' : n >= 1e3 ? Math.round(n / 1e3) + ' mil' : String(n || 0);
+async function initSearch() {
+  $('#packDetail').classList.add('hide'); $('#packSearchUi').classList.remove('hide');
+  $$('#srcSw button').forEach(b => b.classList.toggle('act', b.dataset.src === PSRC));
+  CFKEY = await api('packs/curseforge-key').catch(() => ({ set: false }));
+  renderCfKey();
+  if (PSRC === 'curseforge' && !CFKEY.set) return;
+  if (!$('#packResults').children.length || PQUERY === null) searchPacks();
+  setTimeout(() => $('#qPack').focus(), 50);
+}
+function renderCfKey() {
+  const need = PSRC === 'curseforge' && !(CFKEY && CFKEY.set);
+  $('#cfKeyBox').classList.toggle('hide', !need);
+  $('#packSearchUi').classList.toggle('hide', need);
+  $('#cfKeyNow').innerHTML = PSRC === 'curseforge' && CFKEY && CFKEY.set ? `Clave de CurseForge guardada (${esc(CFKEY.hint)}). <button class="link" id="bCfKeyDel">Quitarla</button>` : '';
+  const del = $('#bCfKeyDel');
+  if (del) del.onclick = async () => { if (!(await ask('¿Quitar la clave de CurseForge de este PC?', 'Quitar', 'Cancelar', true))) return; CFKEY = await act(() => api('packs/curseforge-key', { method: 'PUT', json: { key: '' } })) || CFKEY; $('#packResults').innerHTML = ''; renderCfKey(); };
+}
+$$('#srcSw button').forEach(b => b.onclick = () => { PSRC = b.dataset.src; PQUERY = null; $('#packResults').innerHTML = ''; initSearch(); });
+$('#bCfKey').onclick = async () => {
+  const k = $('#cfKey').value.trim(); if (!k) return toast('Pega la clave primero.', true);
+  $('#bCfKey').disabled = true;
+  const r = await act(() => api('packs/curseforge-key', { method: 'PUT', json: { key: k } }), 'Clave guardada. Ya puedes buscar en CurseForge.');
+  $('#bCfKey').disabled = false;
+  if (r) { CFKEY = r; $('#cfKey').value = ''; renderCfKey(); searchPacks(); }
+};
+async function searchPacks() {
+  const q = $('#qPack').value.trim(), my = ++PTOK, box = $('#packResults');
+  PQUERY = q;
+  box.innerHTML = '<div class="muted" style="padding:8px"><span class="spinner"></span> Buscando en ' + (PSRC === 'modrinth' ? 'Modrinth' : 'CurseForge') + '…</div>';
+  let d;
+  try { d = await api(`packs/search?src=${PSRC}&q=${encodeURIComponent(q)}`); }
+  catch (e) { if (my === PTOK) box.innerHTML = `<div class="warnbox">${esc(e.message)}</div>`; return; }
+  if (my !== PTOK) return;
+  if (d.need_key) { CFKEY = { set: false }; return renderCfKey(); }
+  box.innerHTML = (q ? '' : '<div class="muted small" style="margin:0 2px 2px">Los más descargados:</div>') + (d.items.map((x, i) => `<div class="pack" data-pk="${i}">
+      ${x.icon ? `<img src="${esc(x.icon)}" alt="" loading="lazy">` : '<div class="noimg"></div>'}
+      <div style="min-width:0;flex:1"><div class="t">${esc(x.title)}</div><div class="d">${esc(x.desc || '')}</div>
+      <div class="m"><span>⬇ ${fmtNum(x.downloads)}</span>${x.author ? `<span>por ${esc(x.author)}</span>` : ''}${x.mc ? `<span>Minecraft ${esc(x.mc)}</span>` : ''}${x.loaders.length ? `<span>${esc(x.loaders.map(l => TYPE_LABEL[l] || l).join(', '))}</span>` : ''}${x.server ? '' : '<span style="color:var(--amber)">sin soporte para servidor</span>'}</div></div></div>`).join('')
+    || `<div class="muted" style="padding:8px">No encontré modpacks con «${esc(q)}».</div>`);
+  $$('[data-pk]').forEach(el => el.onclick = () => openPack(d.items[+el.dataset.pk]));
+}
+$('#bSearch').onclick = searchPacks;
+$('#qPack').onkeydown = e => { if (e.key === 'Enter') searchPacks(); };
+async function openPack(x) {
+  $('#packSearchUi').classList.add('hide'); $('#packDetail').classList.remove('hide');
+  $('#pdTitle').textContent = x.title; $('#pdLink').href = x.url || '#'; $('#pdLink').classList.toggle('hide', !x.url);
+  $('#pdNote').textContent = PSRC === 'modrinth' ? 'La app descarga el .mrpack y baja solo los mods que usa el servidor.' : 'Si la versión trae «pack de servidor», se usa ese; si no, la app baja los mods de la lista (sin los que son solo del jugador).';
+  const box = $('#pdVersions');
+  box.innerHTML = '<div class="muted" style="padding:10px"><span class="spinner"></span> Cargando versiones…</div>';
+  let vs;
+  try { vs = await api(`packs/versions?src=${PSRC}&id=${encodeURIComponent(x.id)}`); }
+  catch (e) { box.innerHTML = `<div class="warnbox" style="margin:8px">${esc(e.message)}</div>`; return; }
+  box.innerHTML = vs.slice(0, 40).map((v, i) => `<div class="vrow"><div class="grow"><b>${esc(v.name)}</b>${i === 0 ? ' <span class="tag">la más nueva</span>' : ''}${v.type && v.type !== 'release' ? ` <span class="tag">${esc(v.type)}</span>` : ''}
+      <div class="muted small">${esc([v.mc.slice(0, 3).join(', ') && 'Minecraft ' + v.mc.slice(0, 3).join(', '), v.loaders.map(l => TYPE_LABEL[l] || l).join(', '), v.date ? new Date(v.date).toLocaleDateString() : '', PSRC === 'curseforge' ? (v.server_pack ? 'con pack de servidor' : 'sin pack de servidor') : ''].filter(Boolean).join(' · '))}</div></div>
+      <button class="btn sm ${i === 0 ? 'primary' : ''}" data-pv="${i}">Crear servidor</button></div>`).join('') || '<div class="muted" style="padding:10px">Este modpack no tiene versiones descargables.</div>';
+  $$('[data-pv]').forEach(b => b.onclick = async () => {
+    const v = vs[+b.dataset.pv];
+    wStep('#wProgress'); $('#pTitle').textContent = 'Preparando ' + x.title; $('#pBar').classList.add('indet'); $('#pMsg').textContent = 'Descargando el modpack…';
+    const job = await act(() => api('packs/import', { method: 'POST', json: { src: PSRC, project: x.id, version: v.id, title: x.title } }));
+    if (!job) return wStep('#wSource');
+    trackImport(job);
+  });
+}
+$('#bPackBack').onclick = () => { $('#packDetail').classList.add('hide'); $('#packSearchUi').classList.remove('hide'); };
+
+// --- archivo ---
+setupDrop($('#packDrop'), files => uploadPack(files[0]));
+$('#packIn').onchange = e => { if (e.target.files[0]) uploadPack(e.target.files[0]); e.target.value = ''; };
+let XHR = null;
+function uploadPack(file) {
+  if (!/\.(zip|mrpack)$/i.test(file.name)) return toast('Elige un archivo .zip o .mrpack.', true);
+  wStep('#wProgress'); $('#pTitle').textContent = 'Subiendo ' + file.name;
+  const bar = $('#pBar'); bar.classList.remove('indet'); bar.firstElementChild.style.width = '0%';
+  XHR = new XMLHttpRequest();
+  XHR.open('POST', '/api/import/upload?name=' + encodeURIComponent(file.name));
+  XHR.upload.onprogress = e => { if (e.lengthComputable) { const p = Math.round(e.loaded * 100 / e.total); bar.firstElementChild.style.width = p + '%'; $('#pMsg').textContent = `Subiendo… ${p}% (${fmtSize(e.loaded)} de ${fmtSize(e.total)})`; } };
+  XHR.onload = () => {
+    let d = {}; try { d = JSON.parse(XHR.responseText); } catch { }
+    const ok = XHR.status < 300; XHR = null;
+    if (ok && d.id) trackImport(d); else { toast(d.error || 'No se pudo subir el archivo.', true); wStep('#wSource'); }
+  };
+  XHR.onerror = () => { XHR = null; toast('Se cortó la subida.', true); wStep('#wSource'); };
+  XHR.send(file);
+}
+
+// --- launcher ---
+async function loadInstances() {
+  const box = $('#instList');
+  box.innerHTML = '<div class="muted"><span class="spinner"></span> Buscando modpacks instalados en este PC…</div>';
+  const list = await act(() => api('import/instances'));
+  if (!list) { box.innerHTML = ''; return; }
+  box.innerHTML = list.length ? list.map((i, n) => `<div class="inst"><div class="grow"><div class="n">${esc(i.name)}</div>
+      <div class="m"><span class="tag">${esc(i.launcher)}</span>${esc(i.summary ? i.summary + ' · ' : '')}${i.mods} mods</div></div>
+      <button class="btn sm primary" data-inst="${n}">Usar este</button></div>`).join('')
+    : '<div class="muted">No encontré modpacks de CurseForge, SKLauncher, Prism, Modrinth ni ATLauncher en este PC. Usa «Otra carpeta o archivo».</div>';
+  $$('[data-inst]').forEach(b => b.onclick = () => importPath(list[+b.dataset.inst].path, list[+b.dataset.inst].name));
+}
+$('#bPath').onclick = () => { const v = $('#pathIn').value.trim(); if (v) importPath(v); };
+async function importPath(path, label) {
+  wStep('#wProgress'); $('#pTitle').textContent = 'Analizando ' + (label || path);
+  $('#pBar').classList.add('indet'); $('#pMsg').textContent = 'Revisando los mods…';
+  const d = await act(() => api('import/folder', { method: 'POST', json: { path } }));
+  if (!d) return wStep('#wSource');
+  trackImport(d);
+}
+
+// --- seguimiento ---
+function trackImport(job) {
+  IMPORT = job; clearInterval(IMPORT_TIMER);
+  const tick = async () => {
+    if (!IMPORT) return;
+    const j = await api('import/' + IMPORT.id).catch(e => ({ status: 'error', error: e.message }));
+    IMPORT = { ...IMPORT, ...j };
+    if (j.status === 'analizando') {
+      $('#pTitle').textContent = 'Preparando el modpack';
+      const bar = $('#pBar');
+      if (j.progress == null) bar.classList.add('indet'); else { bar.classList.remove('indet'); bar.firstElementChild.style.width = j.progress + '%'; }
+      $('#pMsg').textContent = j.message || 'Analizando…';
+    } else if (j.status === 'listo') { clearInterval(IMPORT_TIMER); showConfirm(j); }
+    else if (j.status === 'error') { clearInterval(IMPORT_TIMER); toast(j.error || 'No se pudo importar.', true); IMPORT = null; wStep('#wSource'); }
+  };
+  tick(); IMPORT_TIMER = setInterval(tick, 800);
+}
+$('#bCancelProgress').onclick = async () => {
+  if (XHR) { XHR.abort(); XHR = null; }
+  if (IMPORT) await api('import/' + IMPORT.id, { method: 'DELETE' }).catch(() => { });
+  closeWizard();
+};
+
+// --- confirmar ---
+let EDITING = false;
+function detectedText(t, mc, lv) {
+  if (!t) return 'No pude reconocer el loader';
+  return `${TYPE_LABEL[t] || t}${lv ? ' ' + lv : (LOADER_TYPES.includes(t) ? ' (versión recomendada)' : '')} · Minecraft ${mc || '?'}`;
+}
+function showConfirm(j) {
+  const a = j.analysis; EDITING = false;
+  wStep('#wConfirm');
+  $('#cKind').textContent = `${a.pack_kind === 'instancia' ? 'Modpack de ' + (a.launcher || 'una carpeta') : a.pack_kind} · ${a.mods_count} mods`;
+  $('#cDetected').textContent = detectedText(a.type, a.mc_version, a.loader_version);
+  $('#cFrom').textContent = a.detected_from ? 'Detectado desde: ' + a.detected_from : '';
+  $('#cWarnings').innerHTML = (a.warnings || []).map(w => `<div class="warnbox">${esc(w)}</div>`).join('');
+  const co = a.client_only || [];
+  $('#cClientWrap').classList.toggle('hide', !co.length);
+  $('#cClientTitle').textContent = co.some(c => c.skip) ? `${co.length} mods solo para el cliente no se instalarán en el servidor` : `Se desactivarán ${co.length} mods que solo sirven en el cliente`;
+  $('#cClient').innerHTML = co.map((c, n) => c.skip
+    ? `<div class="check"><div>${esc(c.name)}<small>${esc(c.reason)}</small></div></div>`
+    : `<label class="check"><input type="checkbox" data-co="${n}" checked><div>${esc(c.name)} <span class="muted small">(${esc(c.file)})</span><small>${esc(c.reason)}</small></div></label>`).join('');
+  $('#cName').value = a.name || '';
+  setupRam($('#cRam'), $('#cRamOut'), Math.min(a.ram_mb || 4096, Math.max(2048, Math.floor((INFO?.ram_total_mb || 8192) * 0.7 / 512) * 512)), $('#cRamHint'));
+  $('#cEula').checked = false; $('#cAuto').checked = true;
+  // Loader y versión: vienen con lo detectado y se pueden cambiar
+  const t0 = a.type || 'neoforge';
+  $('#eType').innerHTML = Object.entries(TYPE_LABEL).map(([k, v]) => `<option value="${k}" ${k === t0 ? 'selected' : ''}>${v}</option>`).join('');
+  $('#cVerWarn').innerHTML = '';
+  CPICK = versionPicker($('#cPick'), { type: t0, mc: a.mc_version || '', loader: a.loader_version, onChange: importVersionChanged, trusted: a.mc_version || null });
+  $('#eType').onchange = () => { EDITING = true; CPICK.setType($('#eType').value); };
+  if (!a.type || !a.mc_version) EDITING = true;
+}
+let CPICK = null;
+function importVersionChanged(v) {
+  const a = IMPORT?.analysis; if (!a) return;
+  EDITING = EDITING || CPICK?.dirty;
+  const other = a.mc_version && v.mc_version !== a.mc_version;
+  $('#cVerWarn').innerHTML = other && a.mods_count
+    ? `<div class="warnbox">Los mods de este modpack son para Minecraft ${esc(a.mc_version)}. Con ${esc(v.mc_version)} lo más probable es que no funcionen: cámbiala solo si sabes que el modpack es para esa versión.</div>`
+    : (a.type && v.type !== a.type ? `<div class="warnbox">El modpack parece ser de ${esc(TYPE_LABEL[a.type] || a.type)}. Con otro loader sus mods no van a cargar.</div>` : '');
+}
+$('#bCancelImport').onclick = async () => { if (IMPORT) await api('import/' + IMPORT.id, { method: 'DELETE' }).catch(() => { }); closeWizard(); };
+$('#bConfirm').onclick = async () => {
+  if (EDITING && CPICK && !CPICK.valid()) return;
+  if (!$('#cEula').checked) return toast('Tienes que aceptar el EULA de Minecraft.', true);
+  const a = IMPORT.analysis;
+  const body = {
+    name: $('#cName').value, ram_mb: +$('#cRam').value, eula: true, autostart: $('#cAuto').checked,
+    disable: $$('[data-co]').filter(c => c.checked).map(c => a.client_only[+c.dataset.co].file),
+  };
+  if (EDITING && CPICK) { const v = CPICK.get(); body.type = v.type; body.mc_version = v.mc_version; body.loader_version = v.loader_version; }
+  $('#bConfirm').disabled = true;
+  const s = await act(() => api(`import/${IMPORT.id}/confirm`, { method: 'POST', json: body }));
+  $('#bConfirm').disabled = false;
+  if (s) { closeWizard(); await refresh(); selectServer(s.id); setTab('console'); toast('Creando el servidor… el avance se ve en la barra de arriba.'); }
+};
+
+// --- sin mods ---
+let NPICK = null;
+async function initPlain() {
+  $('#types').innerHTML = INFO.types.map(t => `<div class="type ${t.id === NEWTYPE ? 'sel' : ''}" data-type="${t.id}"><b>${t.label}</b><small>${t.desc}</small></div>`).join('');
+  $$('.type').forEach(el => el.onclick = () => { NEWTYPE = el.dataset.type; $$('.type').forEach(x => x.classList.toggle('sel', x === el)); NPICK.setType(NEWTYPE); });
+  setupRam($('#nRam'), $('#nRamOut'), 3072);
+  $('#nEula').checked = false;
+  NPICK = versionPicker($('#nPick'), { type: NEWTYPE, onChange: v => { $('#nName').placeholder = `${TYPE_LABEL[v.type]} ${v.mc_version}`; } });
+}
+$('#bCreatePlain').onclick = async () => {
+  if (!NPICK || !NPICK.valid()) return;
+  if (!$('#nEula').checked) return toast('Tienes que aceptar el EULA de Minecraft.', true);
+  const v = NPICK.get();
+  const body = {
+    type: v.type, mc_version: v.mc_version, name: $('#nName').value, ram_mb: +$('#nRam').value,
+    loader_version: v.loader_version, eula: true, autostart: true,
+    properties: { motd: 'Un servidor de Minecraft en casa' },
+  };
+  $('#bCreatePlain').disabled = true;
+  const s = await act(() => api('servers', { method: 'POST', json: body }));
+  $('#bCreatePlain').disabled = false;
+  if (s) { closeWizard(); $('#nName').value = ''; await refresh(); selectServer(s.id); setTab('console'); }
+};
+
+/* ---------------- arranque ---------------- */
+(async () => {
+  try { INFO = await api('info'); } catch (e) { toast('No se pudo conectar con la app: ' + e.message, true); return; }
+  const sep = INFO.os === 'windows' ? '\\' : '/';
+  if (INFO.app_window) {
+    $('#bgNote').classList.add('hide');
+    // En la ventana de la app no mostramos el menú del navegador (salvo en textos que se pueden copiar)
+    document.addEventListener('contextmenu', e => { if (!e.target.closest('input, textarea, .console, .address, code')) e.preventDefault(); });
+    // Los enlaces externos (playit.gg, EULA) se abren en tu navegador de siempre, como en cualquier programa
+    document.addEventListener('click', e => {
+      const a = e.target.closest('a[href^="http"]');
+      if (!a || a.origin === location.origin) return;
+      e.preventDefault();
+      api('abrir', { method: 'POST', json: { url: a.href } }).catch(() => window.open(a.href, '_blank', 'noopener'));
+    });
+  }
+  $('#pathIn').placeholder = [INFO.home, 'curseforge', 'minecraft', 'Instances', 'MiModpack'].join(sep) + '   (carpeta, .zip o .mrpack)';
+  try { const v = sessionStorage.getItem('sh-volver'); sessionStorage.removeItem('sh-volver'); if (v) CUR = v; } catch { }
+  await refresh();
+  if (CUR) { pollLog(); loadTab(); }
+  TIMERS.push(setInterval(pollLog, 1000), setInterval(refresh, 1000), setInterval(pollPlayitLog, 2000),
+    setInterval(() => { if (TAB === 'players' && CUR && !document.hidden) loadPlayers(true); }, 2500));
+})();
+</script>
+</body>
+</html>

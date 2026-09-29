@@ -1,0 +1,5 @@
+El mensaje de error ahora dice qué mod botó el servidor, por ejemplo: «El servidor no pudo encender por los mods WeatherRefind y guy's Armor HUD».
+Si varios mods solo del jugador fallan a la vez, los desactiva todos juntos en un solo reintento.
+Un mod que no deja encender el servidor y no tiene una versión que funcione se desactiva solo (antes respalda el mundo), junto con los mods que lo necesitan. Si son muchos, lo explica y ofrece un botón.
+Ahora reconoce mods cuyo archivo de datos viene con líneas de Windows (como WeatherRefind), que antes pasaban desapercibidos.
+En la pestaña Mods, cada mod que la app desactivó dice por qué.

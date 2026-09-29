@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "gpudedicada",
+  "version": "1.0.0",
+  "name": "GPU Dedicada",
+  "description": "En laptops con dos tarjetas gráficas, hace que Minecraft use la dedicada (NVIDIA, AMD o Intel Arc). Lo deja configurado en Windows y se nota desde el próximo inicio del juego.",
+  "authors": ["Servidor Home"],
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": { "client": ["gpudedicada.FabricEntrada"] },
+  "depends": { "fabricloader": ">=0.4.0" }
+}
