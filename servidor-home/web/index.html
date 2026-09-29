@@ -72,6 +72,11 @@ select.pick{background:var(--panel2);border:1px solid var(--line);border-radius:
 .restart:hover:not(:disabled){background:#2f3540;color:var(--amber);transform:rotate(-35deg)}
 .restart:disabled{opacity:.4;cursor:not-allowed}
 .restart.spin svg{animation:spin 1s linear infinite}
+.hero-tools{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.invite{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 0;border-top:1px solid var(--line)}
+.invite:first-child{border-top:0}
+.invite .who{flex:1;min-width:180px}
+.invite .lnk{font:12.5px/1.4 var(--mono);word-break:break-all;color:var(--muted)}
 .powerlbl{position:absolute;right:-12px;bottom:-32px;width:64px;text-align:center;font-size:11.5px;color:var(--muted)}
 .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 .chip{background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:2px 10px 2px 4px;font-size:13px;display:inline-flex;align-items:center;gap:6px}
@@ -303,6 +308,7 @@ details summary{cursor:pointer;color:var(--muted);margin:6px 0}
           <div class="sub" id="vSub"></div>
           <div class="status"><span class="dot" id="vDot"></span><span id="vStatus"></span></div>
           <div class="chips" id="vPlayers"></div>
+          <div class="hero-tools"><button class="btn sm danger" id="bDeleteTop" title="Borrar este servidor de este PC">Borrar servidor</button></div>
         </div>
         <div class="powerbox">
           <button class="power" id="power"></button>
@@ -345,6 +351,7 @@ details summary{cursor:pointer;color:var(--muted);margin:6px 0}
       <div class="tab" data-t="addons" id="tabAddons">Mods</div>
       <div class="tab" data-t="settings">Ajustes</div>
       <div class="tab" data-t="backups">Respaldos</div>
+      <div class="tab" data-t="remote">Acceso remoto</div>
     </div>
 
     <section data-p="console">
@@ -467,6 +474,23 @@ details summary{cursor:pointer;color:var(--muted);margin:6px 0}
     <section data-p="backups" class="hide">
       <div class="row" style="margin-bottom:12px"><button class="btn primary" id="bBackup">Respaldar el mundo ahora</button><span class="muted small">Funciona con el servidor encendido.</span></div>
       <table><tbody id="backupList"></tbody></table>
+    </section>
+
+    <section data-p="remote" class="hide">
+      <div class="card">
+        <h3>Deja que alguien de otra ciudad administre este servidor</h3>
+        <p class="muted small" style="margin-top:-4px">Crea un enlace para esa persona y pásaselo por WhatsApp o Discord. Lo abre en su navegador, sin instalar nada, y puede encender, apagar y reiniciar, usar la consola, manejar jugadores (admins, baneos, lista blanca), cambiar los ajustes del juego y hacer respaldos.</p>
+        <p class="muted small">Solo ve <b>este</b> servidor. No puede ver tus otros servidores, ni agregar o quitar mods, ni cambiar la versión o la memoria, ni borrar nada. Todo lo que hace queda en la consola con su nombre, y puedes quitarle el acceso cuando quieras.</p>
+        <div class="row" style="margin-top:12px">
+          <input type="text" id="rName" placeholder="Nombre de quien va a administrar (ej: Ana)" maxlength="40" style="max-width:320px" autocomplete="off">
+          <button class="btn primary" id="bRemoteNew">Crear enlace</button>
+        </div>
+        <div class="warnbox hide" id="rWarn"></div>
+      </div>
+      <div class="card">
+        <h3>Personas con acceso</h3>
+        <div id="rList"></div>
+      </div>
     </section>
   </section>
   <p class="muted small" id="bgNote" style="text-align:center;margin-top:28px">Servidor Home sigue funcionando aunque cierres esta pestaña. Para cerrarlo del todo usa «Salir».</p>
@@ -1046,6 +1070,7 @@ function loadTab() {
   if (TAB === 'settings') loadSettings();
   if (TAB === 'addons') loadAddons();
   if (TAB === 'backups') loadBackups();
+  if (TAB === 'remote') loadRemote();
   if (TAB === 'players') { $('#pList').dataset.key = ''; loadPlayers(); }
   if (TAB === 'console') setTimeout(() => { const b = $('#console'); b.scrollTop = b.scrollHeight; }, 0);
 }
@@ -1172,11 +1197,63 @@ $('#bEula').onclick = async () => {
   if (!$('#sEula').checked) return toast('Marca la casilla para aceptar el EULA.', true);
   await act(() => api(`servers/${CUR}/settings`, { method: 'PUT', json: { eula: true } }), 'EULA aceptado.'); loadSettings();
 };
-$('#bDelete').onclick = async () => {
-  const s = cur();
-  if ($('#delConfirm').value.trim() !== s.name) return toast('Escribe el nombre exacto del servidor para confirmar.', true);
-  const r = await act(() => api(`servers/${CUR}`, { method: 'DELETE' }), 'Servidor borrado.');
-  if (r) { CUR = null; setTab('console'); refresh(); }
+async function deleteServer(typed) {
+  const s = cur(); if (!s) return;
+  if (typed === undefined) {
+    const on = ['en línea', 'iniciando', 'deteniendo'].includes(s.status);
+    typed = await ask(`¿Borrar «${s.name}»?\n\nSe borran el servidor, su mundo y sus respaldos de este PC. No se puede deshacer.` +
+      (on ? '\n\nEstá encendido: primero se apaga guardando el mundo (los jugadores se desconectan).' : '') +
+      '\n\nEscribe el nombre del servidor para confirmar.', 'Borrar', 'Cancelar', true, s.name);
+    if (typed === false) return;
+  }
+  if (typed.trim() !== s.name) return toast('Escribe el nombre exacto del servidor para confirmar.', true);
+  const btns = ['#bDelete', '#bDeleteTop']; btns.forEach(b => { $(b).disabled = true; });
+  toast('Borrando «' + s.name + '»…');
+  const r = await act(() => api(`servers/${encodeURIComponent(s.id)}`, { method: 'DELETE' }), 'Servidor borrado.');
+  btns.forEach(b => { $(b).disabled = false; });
+  if (r) { $('#delConfirm').value = ''; goHome(); }
+}
+$('#bDelete').onclick = () => deleteServer($('#delConfirm').value);
+$('#bDeleteTop').onclick = () => deleteServer();
+
+/* ---------------- acceso remoto ---------------- */
+let REMOTE_T = 0;
+async function loadRemote() {
+  if (!CUR || TAB !== 'remote') return;
+  const id = CUR;
+  const d = await api(`servers/${encodeURIComponent(id)}/remoto`).catch(e => { toast(e.message, true); return null; });
+  if (!d || id !== CUR) return;
+  renderRemote(d);
+  clearTimeout(REMOTE_T);
+  if (d.invites.length && !d.address) REMOTE_T = setTimeout(loadRemote, 4000);    // esperando la dirección de playit
+}
+function renderRemote(d) {
+  const pl = STATE.playit || {};
+  let warn = '';
+  if (d.error) warn = d.error;
+  else if (pl.phase === 'desvinculado' || !pl.phase) warn = 'Primero conecta playit.gg en «Cómo entran tus amigos», arriba: el acceso remoto usa esa misma conexión, sin abrir puertos.';
+  else if (d.tunnel_error) warn = d.tunnel_error;
+  else if (d.invites.length && !d.address) warn = 'Preparando la dirección del acceso remoto en playit.gg… Aparece sola en unos segundos.';
+  $('#rWarn').classList.toggle('hide', !warn); $('#rWarn').textContent = warn;
+  $('#rList').innerHTML = d.invites.map(i => `<div class="invite"><div class="who"><b>${esc(i.name)}</b>
+      <div class="muted small">Creado ${esc(fmtAgo(i.created))} · ${i.used ? 'entró por última vez ' + esc(fmtAgo(i.used)) : 'todavía no entra'}</div>
+      ${i.link ? `<div class="lnk">${esc(i.link)}</div>` : ''}</div>
+      <div class="row">${i.link ? `<button class="btn sm" data-rcopy="${esc(i.link)}">Copiar enlace</button>` : ''}
+      <button class="btn sm danger" data-rdel="${esc(i.id)}" data-rname="${esc(i.name)}">Quitar acceso</button></div></div>`).join('')
+    || '<div class="muted small">Nadie más administra este servidor.</div>';
+  $$('[data-rcopy]').forEach(b => b.onclick = () => copyText(b.dataset.rcopy));
+  $$('[data-rdel]').forEach(b => b.onclick = async () => {
+    if (!(await ask(`¿Quitarle el acceso a ${b.dataset.rname}? Su enlace deja de funcionar al tiro.`, 'Quitar acceso', 'Cancelar', true))) return;
+    const r = await act(() => api(`servers/${encodeURIComponent(CUR)}/remoto/${b.dataset.rdel}`, { method: 'DELETE' }), 'Acceso quitado.');
+    if (r) renderRemote(r);
+  });
+}
+$('#bRemoteNew').onclick = async () => {
+  const name = $('#rName').value.trim();
+  if (!name) return toast('Escribe el nombre de quien va a administrar el servidor.', true);
+  const r = await act(() => api(`servers/${encodeURIComponent(CUR)}/remoto`, { method: 'POST', json: { name } }),
+    `Listo. Cuando aparezca el enlace, cópialo y pásaselo a ${name}. Quien tenga el enlace entra: no lo publiques.`);
+  if (r) { $('#rName').value = ''; renderRemote(r); loadRemote(); }
 };
 /* ---------------- imagen y mensaje del servidor ---------------- */
 const MC_COLORS = { 0: '#000000', 1: '#0000AA', 2: '#00AA00', 3: '#00AAAA', 4: '#AA0000', 5: '#AA00AA', 6: '#FFAA00', 7: '#AAAAAA',

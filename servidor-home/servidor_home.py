@@ -5206,6 +5206,9 @@ class Playit:
         self.target_port = DEFAULT_PORT
         self.tunnel_error = None
         self.last_create_attempt = 0
+        self.admin_port = None           # puerta del acceso remoto (RemoteAccess): solo si hay invitaciones
+        self.admin_error = None
+        self.last_admin_attempt = 0
         self.mode = (_read_text(os.path.join(self.dir, "modo.txt")).strip() or "self-managed")
         if self.secret():
             self.start()
@@ -5539,6 +5542,7 @@ class Playit:
                 lp = None
             tunnels.append({"id": t.get("id"), "name": t.get("name"), "address": t.get("display_address"),
                             "type": t.get("tunnel_type"), "type_label": t.get("tunnel_type_display"),
+                            "port_type": t.get("port_type"),
                             "local_port": lp, "local_ip": fields.get("local_ip") or "127.0.0.1",
                             "disabled": t.get("disabled_reason")})
         self.tunnels = tunnels
@@ -5553,6 +5557,7 @@ class Playit:
             self.create_tunnel()
         elif mc and mc[0]["local_port"] and mc[0]["local_port"] != self.target_port:
             self.retarget(mc[0])
+        self.ensure_admin_tunnel()
         if self.address():
             self.phase = "listo"
             self.message = None
@@ -5582,6 +5587,65 @@ class Playit:
                 f"No se pudo crear la dirección automáticamente ({code}). Créala a mano en playit.gg: "
                 f"Tunnels → Add Tunnel → Minecraft Java, con puerto local {self.target_port}.")
             self.console.add(self.tunnel_error, "err")
+
+    def admin_tunnel(self):
+        if not self.admin_port:
+            return None
+        for t in self.tunnels:
+            if t["type"] != "minecraft-java" and t["local_port"] == self.admin_port and t.get("port_type") in (None, "tcp", "both"):
+                return t
+        return None
+
+    def admin_address(self):
+        t = self.admin_tunnel()
+        return t["address"] if t and t["address"] and not t["disabled"] else None
+
+    def ensure_admin_tunnel(self):
+        """La segunda dirección, la del acceso remoto: un túnel TCP hacia la puerta de RemoteAccess."""
+        if not self.admin_port or not self.agent_id:
+            return
+        t = self.admin_tunnel()
+        if t:
+            self.admin_error = (f"playit.gg desactivó la dirección del acceso remoto ({t['disabled']})."
+                                if t["disabled"] else None)
+            return
+        manual = (f"Créala a mano en playit.gg: Tunnels → Add Tunnel → TCP, elige este equipo y el puerto local "
+                  f"{self.admin_port}. Aparecerá aquí sola.")
+        if self.mode == "assignable":
+            self.admin_error = "Falta la dirección del acceso remoto. " + manual
+            return
+        if any(p["name"] == REMOTE_TUNNEL_NAME for p in self.pending) or time.time() - self.last_admin_attempt < 300:
+            return
+        self.last_admin_attempt = time.time()
+        body = {
+            "ports": {"type": "custom-tcp", "details": 1},
+            "origin": {"type": "agent", "data": {"agent_id": self.agent_id, "config": {"fields": [
+                {"name": "local_ip", "value": "127.0.0.1"},
+                {"name": "local_port", "value": str(self.admin_port)}]}}},
+            "enabled": True, "alloc": None, "name": REMOTE_TUNNEL_NAME, "firewall_id": None,
+        }
+        try:
+            self.call("/v1/tunnels/create", body)
+            self.admin_error = None
+            self.console.add("Dirección del acceso remoto creada en playit.gg.", "app")
+        except PlayitError as e:
+            code = e.data if isinstance(e.data, str) else json.dumps(e.data, ensure_ascii=False)
+            self.admin_error = f"No se pudo crear la dirección del acceso remoto ({code}). " + manual
+            self.console.add(self.admin_error, "err")
+
+    def set_admin_port(self, port):
+        wake = port and not self.admin_port
+        self.admin_port = port
+        if wake:
+            self.last_admin_attempt = 0
+            if self.agent_id:
+                threading.Thread(target=self._refresh_quietly, daemon=True).start()
+
+    def _refresh_quietly(self):
+        try:
+            self.refresh()
+        except Exception:
+            pass
 
     def retarget(self, tunnel):
         try:
@@ -5631,6 +5695,303 @@ class Playit:
         self.connected = False
         self.error = self.message = self.tunnel_error = self.agent_error = None
         self.console.add("Desvinculado de playit.gg.", "app")
+
+
+# --------------------------------------------------------------------------- #
+# Administración remota: alguien de otra ciudad modera UN servidor desde su navegador
+# --------------------------------------------------------------------------- #
+# El dueño crea una invitación para un servidor y le pasa el enlace a su amigo. El enlace apunta a otra dirección
+# de playit.gg (un túnel TCP hacia REMOTE_PORT, que solo escucha en 127.0.0.1) y lleva la clave después del «#»,
+# que el navegador nunca envía. La página firma cada pedido con HMAC-SHA256 (hora, un número al azar y el cuerpo):
+# quien espíe la conexión (va sin cifrar por playit) no puede repetir ni inventar pedidos, ni sacar la clave.
+# Esa puerta solo atiende las rutas de RemoteHandler y siempre sobre el servidor de la invitación: nada de mods,
+# argumentos de Java, versiones ni borrar, porque eso permitiría ejecutar programas en este PC.
+
+REMOTE_FILE = os.path.join(APPDATA_DIR, "acceso-remoto.json")
+REMOTE_PORT_OFFSET = 15            # panel en 8765 → puerta remota en 8780
+REMOTE_CLOCK_SKEW = 120            # segundos; la página corrige su reloj con /r/api/hora
+REMOTE_TUNNEL_NAME = "servidor-home-admin"
+REMOTE_PROPERTIES = [k for k in EDITABLE_PROPERTIES if k != "server-port"]
+REMOTE_ID_RE = re.compile(r"^[0-9a-f]{12}$")
+REMOTE_MAX_INVITES = 20
+
+
+class RemoteAccess:
+    def __init__(self, port):
+        self.port = port
+        self.lock = threading.Lock()
+        self.invites = [i for i in _read_json_list(REMOTE_FILE)
+                        if isinstance(i, dict) and REMOTE_ID_RE.match(str(i.get("id"))) and i.get("key")]
+        self.nonces = {}              # firma ya usada → cuándo vence (contra pedidos repetidos)
+        self.httpd = None
+        self.error = None
+
+    # ---- invitaciones ----
+    def _save(self):
+        os.makedirs(os.path.dirname(REMOTE_FILE), exist_ok=True)
+        _write_json_list(REMOTE_FILE, self.invites)
+        if not IS_WINDOWS:
+            try:
+                os.chmod(REMOTE_FILE, 0o600)
+            except OSError:
+                pass
+
+    def wanted(self):
+        return bool(self.invites)
+
+    def create(self, sid, name):
+        name = re.sub(r"[\x00-\x1f\x7f]", " ", str(name or "")).strip()[:40]
+        if not name:
+            raise ValueError("Escribe el nombre de la persona que va a administrar el servidor.")
+        with self.lock:
+            if len(self.invites) >= REMOTE_MAX_INVITES:
+                raise RuntimeError("Hay demasiados accesos remotos. Quita alguno que ya no se use.")
+            inv = {"id": secrets.token_hex(6), "key": secrets.token_hex(16), "server": sid, "name": name,
+                   "created": int(time.time()), "used": 0}
+            self.invites.append(inv)
+            self._save()
+        self.start()
+        return inv
+
+    def revoke(self, sid, iid):
+        with self.lock:
+            before = len(self.invites)
+            self.invites = [i for i in self.invites if not (i["id"] == iid and i["server"] == sid)]
+            if len(self.invites) == before:
+                raise KeyError(iid)
+            self._save()
+
+    def revoke_server(self, sid):
+        with self.lock:
+            if any(i["server"] == sid for i in self.invites):
+                self.invites = [i for i in self.invites if i["server"] != sid]
+                self._save()
+
+    def link(self, inv, address):
+        return f"http://{address}/#{inv['id']}.{inv['key']}" if address else None
+
+    def state(self, sid, playit):
+        address = playit.admin_address() if playit else None
+        return {
+            "invites": [{"id": i["id"], "name": i["name"], "created": i["created"], "used": i.get("used", 0),
+                         "link": self.link(i, address)} for i in self.invites if i["server"] == sid],
+            "address": address, "port": self.port, "listening": self.httpd is not None, "error": self.error,
+            "playit_phase": playit.phase if playit else None,
+            "tunnel_error": playit.admin_error if playit else None,
+        }
+
+    # ---- firma de cada pedido ----
+    def verify(self, headers, method, target, body):
+        """Devuelve la invitación si el pedido viene firmado con su clave; si no, PermissionError."""
+        iid = headers.get("X-SH-Id") or ""
+        inv = next((i for i in self.invites if i["id"] == iid), None)
+        if not inv:
+            raise PermissionError("Este acceso ya no existe. Pídele un enlace nuevo al dueño del servidor.")
+        try:
+            ts = int(headers.get("X-SH-Ts") or "")
+        except ValueError:
+            raise PermissionError("Pedido sin firma.")
+        now = time.time()
+        if abs(now - ts) > REMOTE_CLOCK_SKEW:
+            raise PermissionError("La hora de tu equipo no calza. Recarga la página.")
+        nonce = headers.get("X-SH-Nonce") or ""
+        if not re.match(r"^[0-9a-f]{16,64}$", nonce):
+            raise PermissionError("Pedido sin firma.")
+        msg = "\n".join([method, target, str(ts), nonce, hashlib.sha256(body).hexdigest()]).encode("utf-8")
+        want = hmac.new(bytes.fromhex(inv["key"]), msg, hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(want, (headers.get("X-SH-Firma") or "").lower()):
+            raise PermissionError("Firma no válida. Abre de nuevo el enlace que te pasaron.")
+        with self.lock:
+            for k in [k for k, exp in self.nonces.items() if exp < now]:
+                del self.nonces[k]
+            if want in self.nonces:
+                raise PermissionError("Pedido repetido.")
+            self.nonces[want] = now + 2 * REMOTE_CLOCK_SKEW
+            if now - inv.get("used", 0) > 60:
+                inv["used"] = int(now)
+                try:
+                    self._save()
+                except OSError:
+                    pass
+        return inv
+
+    # ---- la puerta (solo en este PC; playit la lleva a internet) ----
+    def start(self):
+        with self.lock:
+            if self.httpd:
+                return
+            try:
+                httpd = AppHTTPServer(("127.0.0.1", self.port), RemoteHandler)
+            except OSError as e:
+                self.error = f"No pude abrir el puerto {self.port} para el acceso remoto ({e})."
+                print(self.error)
+                return
+            self.httpd = httpd
+            self.error = None
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+
+    def stop(self):
+        with self.lock:
+            httpd, self.httpd = self.httpd, None
+        if httpd:
+            httpd.shutdown()
+            httpd.server_close()
+
+
+class RemoteHandler(BaseHTTPRequestHandler):
+    """Lo único que se puede hacer desde afuera: siempre sobre el servidor de la invitación firmada."""
+    server_version = "ServidorHome"
+
+    def log_message(self, fmt, *args):
+        pass
+
+    def send_json(self, obj, code=200):
+        body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def route(self, method):
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+            if n > 64 * 1024:
+                raise ValueError("Solicitud demasiado grande.")
+            body = self.rfile.read(n) if n > 0 else b""
+            self.dispatch(method, body)
+        except PermissionError as e:
+            self.send_json({"error": str(e), "auth": True}, 401)
+        except KeyError:
+            self.send_json({"error": "No encontrado."}, 404)
+        except (ValueError, RuntimeError) as e:
+            self.send_json({"error": str(e)}, 400)
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            pass
+        except Exception as e:
+            traceback.print_exc()
+            self.send_json({"error": f"Error interno: {e}"}, 500)
+
+    def do_GET(self):
+        self.route("GET")
+
+    def do_POST(self):
+        self.route("POST")
+
+    def do_PUT(self):
+        self.route("PUT")
+
+    def dispatch(self, method, body):
+        u = urllib.parse.urlparse(self.path)
+        if method == "GET" and u.path in ("/", "/index.html"):
+            data = _read_bytes(os.path.join(WEB_DIR, "remoto.html"))
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Frame-Options", "DENY")
+            self.send_header("Referrer-Policy", "no-referrer")
+            self.end_headers()
+            self.wfile.write(data)
+            return
+        if method == "GET" and u.path == "/r/api/hora":
+            return self.send_json({"t": int(time.time())})
+        if not u.path.startswith("/r/api/") or not manager or not manager.remote:
+            raise KeyError()
+        inv = manager.remote.verify(self.headers, method, self.path, body)
+        s = manager.servers.get(inv["server"])
+        if not s:
+            raise PermissionError("Ese servidor ya no existe en el PC de tu amigo.")
+        p = u.path[len("/r/api/"):].strip("/")
+        q = {k: v[0] for k, v in urllib.parse.parse_qs(u.query).items()}
+        data = json.loads(body.decode("utf-8")) if body else {}
+        if not isinstance(data, dict):
+            raise ValueError("Solicitud no válida.")
+        who = inv["name"]
+
+        if method == "GET" and p == "estado":
+            d = s.summary()
+            keep = ("name", "type_label", "mc_version", "loader_version", "status", "error", "hint", "players",
+                    "max_players", "online_mode", "whitelist", "uptime", "mods_active", "addons_dir", "installed",
+                    "progress", "icon")
+            out = {k: d.get(k) for k in keep}
+            out["admin"] = who
+            out["address"] = manager.playit.address() if manager.playit else None
+            return self.send_json(out)
+        if method == "GET" and p == "icono":
+            if not os.path.isfile(s.icon_path):
+                raise KeyError()
+            data = _read_bytes(s.icon_path)
+            self.send_response(200)
+            self.send_header("Content-Type", "image/png")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(data)
+            return
+        if method == "POST" and p in ("encender", "apagar", "reiniciar", "forzar"):
+            if p == "encender":
+                s.log(f"{who} enciende el servidor (acceso remoto).")
+                s.start(user=True)
+            elif p == "apagar":
+                s.log(f"{who} apaga el servidor (acceso remoto).")
+                s.stop()
+            elif p == "reiniciar":
+                s.log(f"{who} reinicia el servidor (acceso remoto).")
+                s.stop(restart=True)
+            else:
+                s.log(f"{who} fuerza el cierre del servidor (acceso remoto).", "err")
+                s.kill()
+            return self.send_json({"ok": True, "status": s.status})
+        if method == "GET" and p == "consola":
+            last, lines = s.console.since(int(q.get("since", 0)))
+            return self.send_json({"last": last, "lines": lines, "status": s.status, "players": sorted(s.players)})
+        if method == "POST" and p == "comando":
+            cmd = re.sub(r"[\x00-\x1f\x7f]", " ", str(data.get("command") or "")).strip()[:300]
+            if not cmd:
+                raise ValueError("Escribe un comando.")
+            s.console.add(f"({who} desde el acceso remoto)", "app")
+            s.send(cmd)
+            return self.send_json({"ok": True})
+        if p == "jugadores":
+            if method == "GET":
+                return self.send_json(s.players_info())
+            if method == "POST":
+                s.log(f"{who}: {data.get('action')} {data.get('name')} (acceso remoto).")
+                return self.send_json(s.player_action(data.get("action"), data.get("name"), data.get("reason", "")))
+        if p == "propiedades":
+            path = os.path.join(s.dir, "server.properties")
+            if method == "GET":
+                props = read_properties(path)
+                out = {k: props.get(k, "") for k in REMOTE_PROPERTIES}
+                out["motd"] = prop_unescape(out["motd"])
+                return self.send_json(out)
+            if method == "PUT":
+                clean = {}
+                for k, v in (data.get("properties") or {}).items():
+                    if k not in REMOTE_PROPERTIES:
+                        raise ValueError(f"Ese ajuste solo lo puede cambiar el dueño: {k}")
+                    clean[k] = clean_prop_value(v)
+                if "motd" in clean:
+                    clean["motd"] = prop_escape(clean["motd"])
+                write_properties(path, clean)
+                s.log(f"{who} cambió los ajustes ({', '.join(clean) or 'ninguno'}) desde el acceso remoto. "
+                      "Se aplican la próxima vez que se encienda.")
+                return self.send_json({"ok": True})
+        if p == "respaldos":
+            if method == "GET":
+                return self.send_json(s.list_backups())
+            if method == "POST":
+                name = s.backup()
+                s.log(f"Respaldo pedido por {who} (acceso remoto).")
+                return self.send_json({"name": name})
+        raise KeyError()
+
+
+def _read_bytes(path):
+    with open(path, "rb") as f:
+        return f.read()
 
 
 # --------------------------------------------------------------------------- #
@@ -6178,6 +6539,7 @@ class Manager:
             elif os.path.exists(os.path.join(full, STAGING_MARK)):
                 shutil.rmtree(full, ignore_errors=True)   # importación que quedó a medias
         self.playit = None
+        self.remote = None
 
     def get(self, sid):
         s = self.servers.get(sid)
@@ -6298,14 +6660,37 @@ class Manager:
             self.imports.pop(job.id, None)
 
     def delete(self, sid):
+        """Borra el servidor, su mundo y sus respaldos. Si está encendido, primero lo apaga guardando el mundo."""
         s = self.get(sid)
-        if s.running():
-            raise RuntimeError("Apaga el servidor antes de borrarlo.")
         if s.repair_busy or s.status in ("instalando", "reparando"):
-            raise RuntimeError("Espera a que termine la instalación.")
+            raise RuntimeError("Espera a que termine la instalación o el arreglo antes de borrarlo.")
+        if s.running():
+            proc = s.proc
+            s.log("Apagando el servidor para borrarlo…")
+            try:
+                s.stop(timeout=60)
+            except RuntimeError:
+                pass
+            try:
+                proc.wait(timeout=75)
+            except subprocess.TimeoutExpired:
+                s.kill()
+                proc.wait(timeout=15)
+            for _ in range(40):              # que termine de leer la consola antes de borrar la carpeta
+                if s.status not in ("deteniendo", "en línea", "iniciando"):
+                    break
+                time.sleep(0.25)
         with self.lock:
-            del self.servers[sid]
-        shutil.rmtree(s.dir, ignore_errors=True)
+            self.servers.pop(sid, None)
+        if self.remote:
+            self.remote.revoke_server(sid)
+        for attempt in range(3):
+            shutil.rmtree(s.dir, ignore_errors=True)
+            if not os.path.exists(s.dir):
+                return
+            time.sleep(1 + attempt)          # Windows suelta los archivos de Java un momento después
+        raise RuntimeError(f"El servidor se quitó de la lista, pero algunos archivos siguen en uso y no se "
+                           f"pudieron borrar. Puedes borrar la carpeta a mano: {s.dir}")
 
     def shutdown_all(self):
         running = [s for s in self.servers.values() if s.running()]
@@ -6320,6 +6705,8 @@ class Manager:
                 s.proc.wait(timeout=90)
             except Exception:
                 s.proc.kill()
+        if self.remote:
+            self.remote.stop()
         if self.playit:
             self.playit.stop()
 
@@ -7110,6 +7497,22 @@ class Handler(BaseHTTPRequestHandler):
                     s.install()
                 return self.send_json(s.summary())
 
+            if action == "remoto":
+                ra = manager.remote
+                if method == "GET" and len(p) == 3:
+                    return self.send_json(ra.state(s.id, manager.playit))
+                if method == "POST" and len(p) == 3:
+                    ra.create(s.id, self.body_json().get("name"))
+                    manager.playit.set_admin_port(ra.port)
+                    s.log("Se creó un acceso remoto para administrar este servidor.")
+                    return self.send_json(ra.state(s.id, manager.playit), 201)
+                if method == "DELETE" and len(p) == 4:
+                    ra.revoke(s.id, p[3])
+                    if not ra.wanted():
+                        manager.playit.set_admin_port(None)
+                    s.log("Se quitó un acceso remoto.")
+                    return self.send_json(ra.state(s.id, manager.playit))
+
             if method == "POST" and action == "fix":
                 s.fix(self.body_json().get("action") or {})
                 return self.send_json(s.summary())
@@ -7519,6 +7922,10 @@ def main():
         adopt_portable_data()
     manager = Manager()
     manager.playit = Playit()
+    manager.remote = RemoteAccess(args.port + REMOTE_PORT_OFFSET)
+    if manager.remote.wanted():
+        manager.remote.start()
+        manager.playit.set_admin_port(manager.remote.port)
     UPDATER.start()
     if IS_WINDOWS:
         try:

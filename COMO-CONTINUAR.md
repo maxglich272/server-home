@@ -102,6 +102,28 @@ Si le pides a Claude un cambio en otra conversación, dile que lea este archivo 
   `online-mode=false`, o de Mojang (`mojang_uuid()`). El motivo del ban se deja en una sola línea (sin caracteres
   de control), para que no se pueda colar otro comando en la consola.
 
+## Borrar servidores y acceso remoto (después de la 2.5.5)
+
+- **Borrar:** botón «Borrar servidor» arriba, en la tarjeta del servidor (y el de siempre en Ajustes → Opciones
+  avanzadas). Pide escribir el nombre. `Manager.delete()` apaga el servidor guardando el mundo si está encendido,
+  quita sus accesos remotos y reintenta borrar la carpeta si Windows todavía tiene archivos tomados.
+- **Acceso remoto:** pestaña «Acceso remoto» de cada servidor. El dueño crea un enlace por persona y se lo pasa.
+  - `RemoteAccess` abre una segunda puerta HTTP solo en `127.0.0.1:<puerto de la app + 15>` (8780) cuando hay al
+    menos una invitación, y `Playit.ensure_admin_tunnel()` crea para ella un túnel TCP aparte en playit.gg
+    (`"ports": {"type": "custom-tcp", "details": 1}`, nombre `servidor-home-admin`). Si no puede, explica cómo
+    crearlo a mano.
+  - Las invitaciones están en `acceso-remoto.json` (junto a `ajustes.json`): id, clave, servidor y nombre.
+  - El enlace es `http://<dirección>/#<id>.<clave>`: lo que va después del `#` nunca sale del navegador.
+    `web/remoto.html` firma cada pedido con HMAC-SHA256 (SHA-256 escrito en JavaScript, porque por http el navegador
+    no deja usar `crypto.subtle`) sobre método, ruta, hora, un número al azar y el SHA-256 del cuerpo.
+    `RemoteAccess.verify()` rechaza firmas malas, horas con más de 2 minutos de diferencia y firmas repetidas.
+    La conexión va sin cifrar: quien espíe ve la consola, pero no puede sacar la clave ni mandar pedidos.
+  - `RemoteHandler` solo tiene rutas sobre el servidor de la invitación: estado, encender/apagar/reiniciar/forzar,
+    consola y comandos, jugadores, ajustes del juego (`REMOTE_PROPERTIES`: sin puerto ni rcon) y crear respaldos.
+    A propósito no hay mods, argumentos de Java, versiones ni borrar: con eso se podrían ejecutar programas en el
+    PC del dueño. Todo lo que hace el amigo queda en la consola y en `servidor-home.log` con su nombre.
+  - Pruebas: `pruebas/t2/harness_remoto.py` (con el mock encendido; el mock ya acepta túneles `custom-tcp`).
+
 ## El modpack «Create: Volcanes y Estrellas»
 
 Está en `Documentos\servidor home\modpacks\` (versión 1.0.2; la 1.0.0 no arrancaba y la 1.0.1 botaba el servidor
