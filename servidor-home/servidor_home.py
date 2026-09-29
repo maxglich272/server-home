@@ -6161,6 +6161,761 @@ class UpdateBroken(RuntimeError):
 # Administrador
 # --------------------------------------------------------------------------- #
 
+# --------------------------------------------------------------------------- #
+# Plantillas: cualquier tipo de servidor (no solo Minecraft)
+# --------------------------------------------------------------------------- #
+# Una plantilla describe cómo se descarga, configura, enciende, apaga y respalda un servidor. Minecraft sigue
+# funcionando con ServerInstance (todo lo de mods y arreglos automáticos); su plantilla lo declara con
+# handler = "minecraft". Los demás servidores los maneja TemplateServer con lo que dice su plantilla, sin código
+# propio de cada juego. Las plantillas incluidas van aquí dentro porque las actualizaciones automáticas solo
+# pueden reemplazar servidor_home.py y web/ (ver UPDATE_ALLOWED).
+
+TEMPLATE_SCHEMA = 1
+TEMPLATE_CATEGORIES = ("juego", "web", "base-de-datos")
+TEMPLATE_VAR_TYPES = ("text", "number", "choice", "secret", "bool")
+TEMPLATE_PROTOCOLS = ("tcp", "udp", "both")
+TEMPLATE_EXPOSE = ("playit", "lan", "local")
+TEMPLATE_HANDLERS = ("generic", "minecraft")
+TEMPLATE_INSTALL_KINDS = ("none", "file", "archive")
+TEMPLATE_STOP_SIGNALS = ("ctrl_c", "term")
+TEMPLATE_ID_RE = re.compile(r"^[a-z][a-z0-9\-]{1,39}$")
+TEMPLATE_KEY_RE = re.compile(r"^[a-z][a-z0-9_]{0,39}$")
+TEMPLATE_VAR_RE = re.compile(r"\{\{\s*([a-z][a-z0-9_]*)\s*\}\}")
+TEMPLATE_DOWNLOADS = os.path.join(APPDATA_DIR, "descargas")     # se comparte entre servidores de la misma plantilla
+TEMPLATE_STOP_TIMEOUT = 30
+
+BUILTIN_TEMPLATES = [
+    {
+        "meta": {"schema": 1, "id": "minecraft-java", "name": "Minecraft Java", "category": "juego",
+                 "handler": "minecraft", "platforms": ["windows", "linux"],
+                 "requires_eula": "https://aka.ms/MinecraftEULA",
+                 "description": "Vanilla, Paper, Fabric, Forge o NeoForge, con mods y arreglos automáticos."},
+        "ports": [{"name": "juego", "port": 25565, "protocol": "tcp", "expose": "playit"}],
+        "resources": {"ram_mb": 3072},
+        "backup": {"paths": ["world", "world_nether", "world_the_end"],
+                   "before": [{"stdin": "save-off"}, {"stdin": "save-all flush", "wait_s": 3}],
+                   "after": [{"stdin": "save-on"}]},
+    },
+]
+
+
+class TemplateError(ValueError):
+    pass
+
+
+def _tpl_os():
+    return "windows" if IS_WINDOWS else "linux"
+
+
+def render_template_text(text, values, where=""):
+    """Reemplaza {{ variable }} por su valor. Una variable desconocida es un error de la plantilla, no un texto
+    vacío: así una plantilla mal escrita falla al instalarse y no deja una configuración rota a medias."""
+    def rep(m):
+        k = m.group(1)
+        if k not in values:
+            raise TemplateError(f"{where or 'La plantilla'} usa la variable «{k}», que no existe.")
+        v = values[k]
+        return ("true" if v else "false") if isinstance(v, bool) else str(v)
+    return TEMPLATE_VAR_RE.sub(rep, str(text))
+
+
+class Template:
+    """Una plantilla ya revisada. Se arma desde un dict (las incluidas) o desde un template.toml."""
+
+    def __init__(self, data, source="incluida"):
+        self.source = source
+        if not isinstance(data, dict):
+            raise TemplateError("La plantilla no es una tabla.")
+        meta = self._table(data, "meta", required=True)
+        schema = meta.get("schema")
+        if schema != TEMPLATE_SCHEMA:
+            raise TemplateError(f"Esquema de plantilla {schema!r} no soportado (esta versión entiende el {TEMPLATE_SCHEMA}).")
+        self.id = self._str(meta, "id", "meta")
+        if not TEMPLATE_ID_RE.match(self.id):
+            raise TemplateError(f"meta.id «{self.id}» no es válido (minúsculas, números y guiones).")
+        self.name = self._str(meta, "name", "meta")
+        self.category = self._choice(meta, "category", TEMPLATE_CATEGORIES, "meta")
+        self.handler = self._choice(meta, "handler", TEMPLATE_HANDLERS, "meta", default="generic")
+        self.version = str(meta.get("version") or "")
+        self.description = str(meta.get("description") or "")
+        self.requires_eula = str(meta.get("requires_eula") or "")
+        self.platforms = meta.get("platforms") or ["windows", "linux"]
+        if not isinstance(self.platforms, list) or not set(self.platforms) <= {"windows", "linux"}:
+            raise TemplateError("meta.platforms solo puede tener \"windows\" y \"linux\".")
+
+        self.variables = [self._variable(v, i) for i, v in enumerate(self._list(data, "variables"))]
+        keys = [v["key"] for v in self.variables]
+        if len(set(keys)) != len(keys):
+            raise TemplateError("Hay dos variables con la misma clave.")
+
+        self.ports = [self._port(p, i) for i, p in enumerate(self._list(data, "ports"))]
+        if len({p["name"] for p in self.ports}) != len(self.ports):
+            raise TemplateError("Hay dos puertos con el mismo nombre.")
+
+        res = self._table(data, "resources")
+        self.ram_mb = int(res.get("ram_mb") or 0)
+        self.backup = self._backup(self._table(data, "backup"))
+
+        if self.handler == "minecraft":       # lo demás lo resuelve ServerInstance
+            self.install, self.files, self.run, self.stop, self.ready = {"kind": "none"}, [], {}, {}, {}
+            return
+        self.install = self._install(self._table(data, "install"))
+        self.files = [self._file(f, i) for i, f in enumerate(self._list(data, "files"))]
+        self.run = self._run(self._table(data, "run", required=True))
+        self.stop = self._stop(self._table(data, "stop"))
+        self.ready = self._ready(self._table(data, "ready"))
+
+    # ---- lectura y revisión ----
+    @staticmethod
+    def _table(d, key, required=False):
+        v = d.get(key)
+        if v is None:
+            if required:
+                raise TemplateError(f"Falta la sección [{key}].")
+            return {}
+        if not isinstance(v, dict):
+            raise TemplateError(f"[{key}] tiene que ser una tabla.")
+        return v
+
+    @staticmethod
+    def _list(d, key):
+        v = d.get(key) or []
+        if not isinstance(v, list) or not all(isinstance(x, dict) for x in v):
+            raise TemplateError(f"[[{key}]] tiene que ser una lista de tablas.")
+        return v
+
+    @staticmethod
+    def _str(d, key, where, required=True):
+        v = d.get(key)
+        if v is None and not required:
+            return ""
+        if not isinstance(v, str) or not v.strip():
+            raise TemplateError(f"Falta {where}.{key} (texto).")
+        return v.strip()
+
+    @staticmethod
+    def _choice(d, key, options, where, default=None):
+        v = d.get(key, default)
+        if v not in options:
+            raise TemplateError(f"{where}.{key} tiene que ser uno de: {', '.join(options)}.")
+        return v
+
+    def _variable(self, v, i):
+        where = f"variables[{i}]"
+        key = self._str(v, "key", where)
+        if not TEMPLATE_KEY_RE.match(key) or key == "os" or key.startswith("port_"):
+            raise TemplateError(f"{where}.key «{key}» no es válida o está reservada.")
+        t = self._choice(v, "type", TEMPLATE_VAR_TYPES, where, default="text")
+        out = {"key": key, "label": str(v.get("label") or key), "type": t, "default": v.get("default"),
+               "required": bool(v.get("required", False))}
+        if t == "choice":
+            opts = v.get("options")
+            if not isinstance(opts, dict) or not opts:
+                raise TemplateError(f"{where}.options: una variable «choice» necesita opciones.")
+            out["options"] = {str(k): str(lbl) for k, lbl in opts.items()}
+        if t == "number":
+            for k in ("min", "max"):
+                if k in v:
+                    out[k] = float(v[k])
+        return out
+
+    def _port(self, p, i):
+        where = f"ports[{i}]"
+        port = p.get("port")
+        if not isinstance(port, int) or not 1 <= port <= 65535:
+            raise TemplateError(f"{where}.port tiene que ser un número entre 1 y 65535.")
+        name = self._str(p, "name", where)
+        if not TEMPLATE_KEY_RE.match(name):
+            raise TemplateError(f"{where}.name «{name}» no es válido.")
+        return {"name": name, "port": port,
+                "protocol": self._choice(p, "protocol", TEMPLATE_PROTOCOLS, where, default="tcp"),
+                "expose": self._choice(p, "expose", TEMPLATE_EXPOSE, where, default="local")}
+
+    def _for_os(self, d):
+        """Une la parte común de una sección con la de este sistema ([install.windows], [run.linux]...)."""
+        out = {k: v for k, v in d.items() if k not in ("windows", "linux") or not isinstance(v, dict)}
+        own = d.get(_tpl_os())
+        if isinstance(own, dict):
+            out.update(own)
+        return out
+
+    def _install(self, d):
+        d = self._for_os(d)
+        kind = self._choice(d, "kind", TEMPLATE_INSTALL_KINDS, "install", default="none")
+        out = {"kind": kind}
+        if kind != "none":
+            out["url"] = self._str(d, "url", "install")
+            out["sha256"] = str(d.get("sha256") or "").lower()
+            if not re.match(r"^[0-9a-f]{64}$", out["sha256"]):
+                raise TemplateError("install.sha256 es obligatorio: sin él no se puede comprobar la descarga.")
+            out["strip"] = str(d.get("strip") or "").strip("/")
+            out["name"] = safe_filename(str(d.get("name") or os.path.basename(urllib.parse.urlparse(out["url"]).path)
+                                            or "descarga"))
+        return out
+
+    def _file(self, f, i):
+        where = f"files[{i}]"
+        path = self._str(f, "path", where)
+        if safe_join("/x", path) is None:
+            raise TemplateError(f"{where}.path «{path}» sale de la carpeta del servidor.")
+        if not isinstance(f.get("content"), str):
+            raise TemplateError(f"{where}.content tiene que ser texto.")
+        return {"path": path, "content": f["content"], "overwrite": bool(f.get("overwrite", False))}
+
+    def _run(self, d):
+        cmd = d.get(_tpl_os(), d.get("command"))
+        if not cmd:
+            raise TemplateError(f"[run] no tiene comando para {_tpl_os()}.")
+        if not isinstance(cmd, list) or not all(isinstance(x, str) and x for x in cmd):
+            raise TemplateError("El comando de [run] tiene que ser una lista de textos, por ejemplo [\"server.exe\", \"-port\", \"7777\"].")
+        env = d.get("env") or {}
+        if not isinstance(env, dict):
+            raise TemplateError("run.env tiene que ser una tabla.")
+        return {"command": cmd, "env": {str(k): str(v) for k, v in env.items()}}
+
+    def _stop(self, d):
+        stdin = d.get("stdin")
+        sig = d.get("signal")
+        if stdin is not None and (not isinstance(stdin, str) or not stdin.strip()):
+            raise TemplateError("stop.stdin tiene que ser el comando que apaga el servidor.")
+        if sig is not None and sig not in TEMPLATE_STOP_SIGNALS:
+            raise TemplateError(f"stop.signal tiene que ser uno de: {', '.join(TEMPLATE_STOP_SIGNALS)}.")
+        timeout = d.get("timeout_s", TEMPLATE_STOP_TIMEOUT)
+        if not isinstance(timeout, (int, float)) or not 1 <= timeout <= 600:
+            raise TemplateError("stop.timeout_s tiene que estar entre 1 y 600 segundos.")
+        return {"stdin": stdin, "signal": sig or ("term" if stdin is None else None), "timeout_s": float(timeout)}
+
+    def _ready(self, d):
+        out = {}
+        if d.get("log"):
+            try:
+                out["log"] = re.compile(str(d["log"]))
+            except re.error as e:
+                raise TemplateError(f"ready.log no es una expresión válida: {e}")
+        if d.get("port"):
+            if d["port"] not in [p["name"] for p in self.ports]:
+                raise TemplateError(f"ready.port «{d['port']}» no está en [[ports]].")
+            out["port"] = d["port"]
+        return out
+
+    def _backup(self, d):
+        paths = d.get("paths") or []
+        if not isinstance(paths, list) or any(not isinstance(p, str) or safe_join("/x", p) is None for p in paths):
+            raise TemplateError("backup.paths tiene que ser una lista de carpetas dentro del servidor.")
+        steps = {}
+        for k in ("before", "after"):
+            raw = d.get(k) or []
+            if isinstance(raw, dict):
+                raw = [raw]
+            if not isinstance(raw, list) or not all(isinstance(s, dict) and isinstance(s.get("stdin"), str) for s in raw):
+                raise TemplateError(f"backup.{k} tiene que ser una lista de {{ stdin = \"comando\" }}.")
+            steps[k] = [{"stdin": s["stdin"], "wait_s": float(s.get("wait_s") or 0)} for s in raw]
+        return {"paths": paths, **steps}
+
+    # ---- uso ----
+    def supported(self):
+        return _tpl_os() in self.platforms
+
+    def values(self, answers, ports=None):
+        """Valores para {{ }}: respuestas del formulario (revisadas), puertos y el sistema."""
+        answers = answers or {}
+        out = {"os": _tpl_os()}
+        for v in self.variables:
+            k, t = v["key"], v["type"]
+            val = answers.get(k, v["default"])
+            if val is None or val == "":
+                if v["required"]:
+                    raise ValueError(f"Falta «{v['label']}».")
+                val = ""
+            elif t == "number":
+                try:
+                    val = float(val)
+                except (TypeError, ValueError):
+                    raise ValueError(f"«{v['label']}» tiene que ser un número.")
+                if ("min" in v and val < v["min"]) or ("max" in v and val > v["max"]):
+                    raise ValueError(f"«{v['label']}» está fuera del rango permitido.")
+                val = int(val) if val == int(val) else val
+            elif t == "choice":
+                if str(val) not in v["options"]:
+                    raise ValueError(f"«{v['label']}» no es una opción válida.")
+                val = str(val)
+            elif t == "bool":
+                val = val if isinstance(val, bool) else str(val).lower() in ("1", "true", "si", "sí", "on")
+            else:
+                val = str(val)
+                if "\n" in val or "\r" in val:
+                    raise ValueError(f"«{v['label']}» no puede tener saltos de línea.")
+            out[k] = val
+        for p in self.ports:
+            out["port_" + p["name"]] = int((ports or {}).get(p["name"]) or p["port"])
+        return out
+
+    def to_json(self):
+        return {"id": self.id, "name": self.name, "category": self.category, "handler": self.handler,
+                "version": self.version, "description": self.description, "requires_eula": self.requires_eula,
+                "supported": self.supported(), "ram_mb": self.ram_mb,
+                "variables": [{k: v for k, v in var.items() if not (var["type"] == "secret" and k == "default")}
+                              for var in self.variables],
+                "ports": self.ports}
+
+
+def parse_template(text, source="archivo"):
+    """Lee un template.toml (catálogo o plantillas de la persona). Necesita Python 3.11 o más nuevo (tomllib); las
+    plantillas incluidas no pasan por aquí."""
+    try:
+        import tomllib
+    except ImportError:
+        raise TemplateError("Leer plantillas .toml necesita Python 3.11 o más nuevo.")
+    try:
+        data = tomllib.loads(text)
+    except tomllib.TOMLDecodeError as e:
+        raise TemplateError(f"La plantilla no es TOML válido: {e}")
+    return Template(data, source)
+
+
+def load_templates(extra=()):
+    """Plantillas disponibles, por id. `extra` son dicts adicionales (las pruebas y, más adelante, el catálogo)."""
+    out = {}
+    for d in list(BUILTIN_TEMPLATES) + list(extra):
+        t = d if isinstance(d, Template) else Template(d)
+        out[t.id] = t
+    return out
+
+
+TEMPLATES = load_templates()
+
+
+def port_free(port, protocol="tcp"):
+    """¿Nadie más escucha en ese puerto de este PC?"""
+    kinds = {"tcp": [socket.SOCK_STREAM], "udp": [socket.SOCK_DGRAM],
+             "both": [socket.SOCK_STREAM, socket.SOCK_DGRAM]}[protocol]
+    for kind in kinds:
+        s = socket.socket(socket.AF_INET, kind)
+        try:
+            if not IS_WINDOWS:
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            s.bind(("0.0.0.0", port))
+        except OSError:
+            return False
+        finally:
+            s.close()
+    return True
+
+
+def extract_archive(path, dest, strip=""):
+    """Extrae un .zip o .tar(.gz/.xz) dentro de dest sin dejar salir nada de la carpeta. `strip` quita una carpeta
+    inicial (muchos paquetes traen todo dentro de «servidor-1.2/»)."""
+    prefix = (strip.strip("/") + "/") if strip else ""
+
+    def target(name):
+        name = name.replace("\\", "/")
+        while name.startswith("./"):
+            name = name[2:]
+        if prefix:
+            if not name.startswith(prefix):
+                return None
+            name = name[len(prefix):]
+        return safe_join(dest, name) if name.strip("/") else None
+
+    count = 0
+    if zipfile.is_zipfile(path):
+        with zipfile.ZipFile(path) as z:
+            for info in z.infolist():
+                full = target(info.filename)
+                if not full or info.is_dir():
+                    continue
+                os.makedirs(os.path.dirname(full), exist_ok=True)
+                with z.open(info) as src, open(full, "wb") as out:
+                    shutil.copyfileobj(src, out)
+                mode = (info.external_attr >> 16) & 0o777
+                if mode and not IS_WINDOWS:
+                    os.chmod(full, mode | 0o600)
+                count += 1
+    elif tarfile.is_tarfile(path):
+        with tarfile.open(path) as t:
+            for m in t.getmembers():
+                full = target(m.name)
+                if not full or not m.isfile():         # sin enlaces ni dispositivos
+                    continue
+                os.makedirs(os.path.dirname(full), exist_ok=True)
+                with t.extractfile(m) as src, open(full, "wb") as out:
+                    shutil.copyfileobj(src, out)
+                if not IS_WINDOWS:
+                    os.chmod(full, (m.mode & 0o777) | 0o600)
+                count += 1
+    else:
+        raise RuntimeError(f"{os.path.basename(path)} no es un .zip ni un .tar.")
+    if not count:
+        raise RuntimeError(f"{os.path.basename(path)} no trae archivos" + (f" dentro de «{strip}»." if strip else "."))
+    return count
+
+
+class TemplateServer:
+    """Un servidor que no es de Minecraft, manejado solo con lo que dice su plantilla. Tiene la misma forma que
+    ServerInstance en lo que usan Manager y la interfaz (estado, consola, encender, apagar, instalar)."""
+
+    repair_busy = False                 # no hay arreglos automáticos: lo miran busy_reason() y delete()
+
+    def __init__(self, sid, template=None):
+        self.id = sid
+        self.dir = os.path.join(SERVERS_DIR, sid)
+        self.meta = {}
+        self.proc = None
+        self.status = "detenido"
+        self.error = None
+        self.hint = None
+        self.console = Console()
+        self.players = set()
+        self.started_at = None
+        self.lock = threading.RLock()
+        self.progress = None
+        self.stop_asked = False
+        self.restart_pending = False
+        self.load_meta()
+        self.template = template or TEMPLATES.get(self.meta.get("template"))
+
+    meta_path = ServerInstance.meta_path
+    pid_file = ServerInstance.pid_file
+    save_meta = ServerInstance.save_meta
+    log = ServerInstance.log
+    _file_log = ServerInstance._file_log
+    running = ServerInstance.running
+
+    def load_meta(self):
+        if os.path.exists(self.meta_path):
+            with open(self.meta_path, encoding="utf-8") as f:
+                self.meta = json.load(f)
+        if not self.meta.get("installed"):
+            self.status = "sin instalar"
+
+    def world_dirs(self):
+        return []
+
+    def ports(self):
+        own = self.meta.get("ports") or {}
+        return {p["name"]: int(own.get(p["name"]) or p["port"]) for p in (self.template.ports if self.template else [])}
+
+    def port(self):
+        ps = self.ports()
+        return next(iter(ps.values()), 0)
+
+    def values(self):
+        return self.template.values(self.meta.get("values") or {}, self.ports())
+
+    def summary(self):
+        t = self.template
+        return {
+            "id": self.id, "name": self.meta.get("name", self.id),
+            "template": self.meta.get("template"), "category": t.category if t else None,
+            "type": self.meta.get("template"), "type_label": t.name if t else "Plantilla desconocida",
+            "mc_version": None, "loader_version": None, "modpack": None,
+            "ram_mb": self.meta.get("ram_mb", t.ram_mb if t else 0), "jvm_args": "", "java": None,
+            "port": self.port(), "ports": self.ports(),
+            "status": self.status, "error": self.error, "hint": self.hint,
+            "players": [], "max_players": "", "online_mode": "", "whitelist": "",
+            "uptime": int(time.time() - self.started_at) if self.started_at and self.proc else 0,
+            "addons_dir": None, "mods_active": 0,
+            "installed": bool(self.meta.get("installed")), "created": self.meta.get("created"),
+            "path": self.dir, "progress": self.progress.to_json() if self.progress else None,
+            "repairs": [], "auto_fix": False, "java_opt": False, "perf_mods": False, "icon": None, "share": None,
+        }
+
+    # ---- instalar ----
+    def install(self, autostart=False):
+        if not self.template:
+            raise RuntimeError("No encuentro la plantilla de este servidor.")
+        if not self.template.supported():
+            raise RuntimeError(f"«{self.template.name}» todavía no funciona en {_tpl_os().capitalize()}.")
+        with self.lock:
+            if self.status in ("instalando", "iniciando", "deteniendo") or self.running():
+                raise RuntimeError("Espera a que termine lo que está haciendo el servidor.")
+            self.status = "instalando"
+            self.error = None
+            self.progress = Progress("instalando", [("download", "Descargando", 6), ("extract", "Preparando", 2),
+                                                    ("files", "Configurando", 1)])
+        threading.Thread(target=self._install_worker, args=(autostart,), daemon=True).start()
+
+    def _install_worker(self, autostart):
+        t = self.template
+        try:
+            values = self.values()
+            inst = t.install
+            if inst["kind"] != "none":
+                url = render_template_text(inst["url"], values, "install.url")
+                cache = os.path.join(TEMPLATE_DOWNLOADS, t.id, inst["sha256"][:16] + "-" + inst["name"])
+                if os.path.isfile(cache) and _sha256_file(cache) == inst["sha256"]:
+                    self.log(f"Uso la descarga guardada de {inst['name']}.")
+                else:
+                    self.progress.begin("download", detail=inst["name"])
+                    self.log(f"Descargando {inst['name']}…")
+                    download(url, cache, self.log, expected_sha256=inst["sha256"],
+                             progress=lambda d, n: self.progress.update(d / n, mb_text(d, n)))
+                self.progress.begin("extract")
+                if inst["kind"] == "archive":
+                    n = extract_archive(cache, self.dir, render_template_text(inst["strip"], values, "install.strip"))
+                    self.log(f"Extraje {n} archivos.")
+                else:
+                    shutil.copyfile(cache, os.path.join(self.dir, inst["name"]))
+            self.progress.begin("files")
+            self.write_files(values)
+            exe = safe_join(self.dir, t.run["command"][0])
+            if exe and os.path.isfile(exe) and not IS_WINDOWS:
+                os.chmod(exe, os.stat(exe).st_mode | 0o755)
+            with self.lock:
+                self.meta["installed"] = True
+                self.meta["template_version"] = t.version
+                self.save_meta()
+                self.status = "detenido"
+                self.progress = None
+            self.log(f"«{t.name}» instalado.")
+        except Exception as e:
+            with self.lock:
+                self.status = "error" if self.meta.get("installed") else "sin instalar"
+                self.error = f"No se pudo instalar: {e}"
+                self.progress = None
+            self.log(self.error, "err")
+            return
+        if autostart:
+            try:
+                self.start()
+            except Exception as e:
+                self.log(f"No se pudo encender: {e}", "err")
+
+    def write_files(self, values=None, force=False):
+        """Escribe los archivos de configuración de la plantilla. Los que ya existen no se tocan (la persona pudo
+        editarlos), salvo los marcados overwrite = true."""
+        values = values or self.values()
+        for f in self.template.files:
+            full = safe_join(self.dir, render_template_text(f["path"], values, "files.path"))
+            if not full:
+                raise RuntimeError(f"La ruta {f['path']} sale de la carpeta del servidor.")
+            if os.path.exists(full) and not (force or f["overwrite"]):
+                continue
+            os.makedirs(os.path.dirname(full), exist_ok=True)
+            with open(full, "w", encoding="utf-8", newline="\n") as out:
+                out.write(render_template_text(f["content"], values, f["path"]))
+
+    # ---- encender y apagar ----
+    def build_command(self, values=None):
+        values = values or self.values()
+        cmd = [render_template_text(a, values, "run") for a in self.template.run["command"]]
+        exe = safe_join(self.dir, cmd[0])
+        if exe and os.path.isfile(exe):
+            cmd[0] = exe                      # el binario viene con el servidor; si no, se busca en el PATH
+        return cmd
+
+    def start(self, user=False):
+        with self.lock:
+            if not self.template:
+                raise RuntimeError("No encuentro la plantilla de este servidor.")
+            if not self.meta.get("installed"):
+                raise RuntimeError("El servidor aún no está instalado.")
+            if self.running():
+                raise RuntimeError("El servidor ya está encendido.")
+            if self.status in ("instalando", "deteniendo"):
+                raise RuntimeError("Espera un momento: el servidor está terminando otra tarea.")
+            if self.template.requires_eula and not self.meta.get("eula"):
+                raise RuntimeError("Falta aceptar la licencia de este servidor.")
+            mine = self.ports()
+            for other in (manager.servers.values() if manager else []):
+                if other is not self and other.running():
+                    theirs = set(other.ports().values()) if isinstance(other, TemplateServer) else {other.port()}
+                    clash = theirs & set(mine.values())
+                    if clash:
+                        raise RuntimeError(f"«{other.meta.get('name')}» ya está encendido en el puerto {min(clash)}. "
+                                           "Apágalo primero o cambia el puerto.")
+            for p in self.template.ports:
+                if not port_free(mine[p["name"]], p["protocol"]):
+                    raise RuntimeError(f"Otro programa de este PC ya usa el puerto {mine[p['name']]}. "
+                                       "Ciérralo o cambia el puerto de este servidor.")
+            values = self.values()
+            cmd = self.build_command(values)
+            env = dict(os.environ)
+            env.update({k: render_template_text(v, values, "run.env") for k, v in self.template.run["env"].items()})
+            self.log("$ " + " ".join(cmd), "app")
+            try:
+                self.proc = subprocess.Popen(cmd, cwd=self.dir, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                             stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace",
+                                             bufsize=1, **child_kwargs(detach=True))
+            except OSError as e:
+                raise RuntimeError(f"No se pudo abrir {os.path.basename(cmd[0])}: {e.strerror or e}")
+            attach_to_job(self.proc)
+            try:
+                with open(self.pid_file, "w") as f:
+                    f.write(str(self.proc.pid))
+            except OSError:
+                pass
+            self.status = "iniciando" if self.template.ready else "en línea"
+            self.error = self.hint = None
+            self.stop_asked = False
+            self.started_at = time.time()
+            proc = self.proc
+            threading.Thread(target=self._reader, args=(proc,), daemon=True).start()
+            if "port" in self.template.ready:
+                threading.Thread(target=self._wait_port, args=(proc, mine[self.template.ready["port"]]),
+                                 daemon=True).start()
+
+    def _online(self, proc):
+        with self.lock:
+            if proc is self.proc and self.status == "iniciando":
+                self.status = "en línea"
+                self.log("Servidor encendido.")
+
+    def _wait_port(self, proc, port):
+        while proc is self.proc and proc.poll() is None and self.status == "iniciando":
+            try:
+                with socket.create_connection(("127.0.0.1", port), timeout=1):
+                    self._online(proc)
+                    return
+            except OSError:
+                time.sleep(1)
+
+    def _reader(self, proc):
+        ready = self.template.ready.get("log")
+        for line in proc.stdout:
+            line = ANSI_RE.sub("", line.rstrip("\r\n"))
+            self.console.add(line, "out")
+            if ready and self.status == "iniciando" and ready.search(line):
+                self._online(proc)
+        code = proc.wait()
+        try:
+            os.remove(self.pid_file)
+        except OSError:
+            pass
+        with self.lock:
+            if proc is not self.proc:
+                return
+            stopping = self.status == "deteniendo" or self.stop_asked
+            self.proc = None
+            self.started_at = None
+            if stopping or code == 0:
+                self.status = "detenido"
+                self.log(f"Servidor apagado (código {code}).")
+            else:
+                self.status = "error"
+                self.error = f"El servidor se cerró solo (código {code})."
+                self.log(self.error + " Revisa las últimas líneas de la consola.", "err")
+            restart, self.restart_pending = self.restart_pending, False
+        if restart:
+            try:
+                self.start()
+            except Exception as e:
+                self.log(f"No se pudo reiniciar: {e}", "err")
+
+    def send(self, command):
+        with self.lock:
+            if not self.running():
+                raise RuntimeError("El servidor no está encendido.")
+            command = command.strip()
+            stop_cmd = (self.template.stop.get("stdin") or "").strip().lower()
+            if stop_cmd and command.lower() == stop_cmd:
+                self.stop_asked = True
+            self.console.add("> " + command, "cmd")
+            self.proc.stdin.write(command + "\n")
+            self.proc.stdin.flush()
+
+    def _signal(self, proc, how):
+        """Pide al proceso que se cierre por las buenas: Ctrl+C o SIGTERM a todo su grupo."""
+        try:
+            if IS_WINDOWS:
+                # Sin ventana de consola Windows no entrega Ctrl+C; CTRL_BREAK a su grupo es lo más parecido. Si el
+                # programa no lo atiende, el tiempo de espera termina y se cierra a la fuerza.
+                os.kill(proc.pid, signal.CTRL_BREAK_EVENT)
+            else:
+                os.killpg(proc.pid, signal.SIGINT if how == "ctrl_c" else signal.SIGTERM)
+        except (OSError, AttributeError, ValueError):
+            pass
+
+    def stop(self, restart=False, timeout=None):
+        with self.lock:
+            if not self.running():
+                if restart:
+                    self.start()
+                    return
+                raise RuntimeError("El servidor no está encendido.")
+            self.restart_pending = restart
+            self.status = "deteniendo"
+            proc = self.proc
+            how = self.template.stop
+            if how.get("stdin"):
+                try:
+                    self.send(how["stdin"])
+                except Exception:
+                    self._signal(proc, "term")
+            else:
+                self._signal(proc, how.get("signal"))
+        wait = timeout or how["timeout_s"]
+
+        def watchdog():
+            try:
+                proc.wait(timeout=wait)
+            except subprocess.TimeoutExpired:
+                self.log(f"No se apagó en {int(wait)} s; lo cierro a la fuerza.", "err")
+                self._kill_tree(proc)
+        threading.Thread(target=watchdog, daemon=True).start()
+        return proc
+
+    def stop_and_wait(self):
+        """Para cerrar la app: apaga y espera (el tiempo de la plantilla + un margen)."""
+        try:
+            proc = self.stop()
+        except RuntimeError:
+            return
+        try:
+            proc.wait(timeout=self.template.stop["timeout_s"] + 10)
+        except subprocess.TimeoutExpired:
+            self._kill_tree(proc)
+
+    @staticmethod
+    def _kill_tree(proc):
+        if IS_WINDOWS:
+            windows_kill(proc.pid)
+        else:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except OSError:
+                pass
+        try:
+            proc.kill()
+        except OSError:
+            pass
+
+    def kill(self):
+        with self.lock:
+            if self.running():
+                self.status = "deteniendo"
+                self._kill_tree(self.proc)
+
+    def close_orphan(self):
+        """Si la app se cerró de golpe, el servidor pudo quedar abierto. En Windows lo cierra el Job; en Linux se
+        busca por el PID guardado (y que su carpeta sea la del servidor) y se apaga todo su grupo."""
+        if IS_WINDOWS or not os.path.isdir("/proc"):
+            try:
+                os.remove(self.pid_file)
+            except OSError:
+                pass
+            return
+
+        def is_ours(pid):
+            return os.path.realpath(os.readlink(f"/proc/{pid}/cwd")) == os.path.realpath(self.dir)
+        pid = stale_process(self.pid_file, is_ours)
+        if not pid:
+            return
+        self.log("Encontré este servidor abierto desde la vez anterior; lo apago.")
+        try:
+            os.killpg(pid, signal.SIGTERM)
+        except OSError:
+            pass
+
+
+def _sha256_file(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 class Manager:
     def __init__(self):
         os.makedirs(SERVERS_DIR, exist_ok=True)
@@ -6173,11 +6928,31 @@ class Manager:
             if not os.path.isdir(full) or d.startswith("."):
                 continue
             if os.path.exists(os.path.join(full, META_FILE)):
-                self.servers[d] = ServerInstance(d)
+                self.servers[d] = self._load_server(d)
                 self.servers[d].close_orphan()
             elif os.path.exists(os.path.join(full, STAGING_MARK)):
                 shutil.rmtree(full, ignore_errors=True)   # importación que quedó a medias
         self.playit = None
+
+    @staticmethod
+    def _load_server(sid):
+        """Los servidores de antes de las plantillas son de Minecraft: se les anota la plantilla la primera vez."""
+        try:
+            with open(os.path.join(SERVERS_DIR, sid, META_FILE), encoding="utf-8") as f:
+                tid = json.load(f).get("template")
+        except (OSError, ValueError):
+            tid = None
+        t = TEMPLATES.get(tid)
+        if tid and (not t or t.handler != "minecraft"):
+            return TemplateServer(sid)
+        s = ServerInstance(sid)
+        if not tid:
+            s.meta["template"] = "minecraft-java"
+            try:
+                s.save_meta()
+            except OSError:
+                pass
+        return s
 
     def get(self, sid):
         s = self.servers.get(sid)
@@ -6193,6 +6968,11 @@ class Manager:
         return sid
 
     def create(self, data):
+        tpl = TEMPLATES.get(data.get("template") or "minecraft-java")
+        if not tpl:
+            raise ValueError("Esa plantilla no existe.")
+        if tpl.handler != "minecraft":
+            return self.create_from_template(tpl, data)
         t = data.get("type")
         if t not in SERVER_TYPES:
             raise ValueError("Tipo de servidor no válido.")
@@ -6212,7 +6992,7 @@ class Manager:
                 "loader_version": (data.get("loader_version") or "").strip() or None,
                 "ram_mb": int(data.get("ram_mb") or 3072),
                 "jvm_args": data.get("jvm_args", ""),
-                "eula": True, "installed": False,
+                "eula": True, "installed": False, "template": "minecraft-java",
                 "created": time.strftime("%Y-%m-%d %H:%M"),
             }
             s.save_meta()
@@ -6223,6 +7003,34 @@ class Manager:
             if "motd" in props:
                 props["motd"] = prop_escape(props["motd"])
             write_properties(os.path.join(s.dir, "server.properties"), props)
+            s.status = "sin instalar"
+            self.servers[sid] = s
+        s.install(autostart=bool(data.get("autostart")))
+        return s
+
+    def create_from_template(self, tpl, data):
+        if not tpl.supported():
+            raise ValueError(f"«{tpl.name}» todavía no funciona en {_tpl_os().capitalize()}.")
+        if tpl.requires_eula and not data.get("eula"):
+            raise ValueError(f"Debes aceptar la licencia de {tpl.name} para crear el servidor.")
+        answers = data.get("values") or {}
+        ports = {}
+        for p in tpl.ports:
+            v = (data.get("ports") or {}).get(p["name"])
+            if v is not None:
+                if not isinstance(v, int) or not 1 <= v <= 65535:
+                    raise ValueError(f"El puerto «{p['name']}» no es válido.")
+                ports[p["name"]] = v
+        tpl.values(answers, ports)                       # revisa el formulario antes de crear nada
+        name = (data.get("name") or "").strip()[:60] or tpl.name
+        with self.lock:
+            sid = self._unique_id(name)
+            os.makedirs(os.path.join(SERVERS_DIR, sid))
+            s = TemplateServer(sid, tpl)
+            s.meta = {"name": name, "template": tpl.id, "values": answers, "ports": ports,
+                      "ram_mb": int(data.get("ram_mb") or tpl.ram_mb or 0), "eula": bool(data.get("eula")),
+                      "installed": False, "created": time.strftime("%Y-%m-%d %H:%M")}
+            s.save_meta()
             s.status = "sin instalar"
             self.servers[sid] = s
         s.install(autostart=bool(data.get("autostart")))
@@ -6271,7 +7079,7 @@ class Manager:
             s.meta = {
                 "name": name, "type": t, "mc_version": mc, "loader_version": lv,
                 "ram_mb": max(1024, int(data.get("ram_mb") or a.get("ram_mb") or 4096)),
-                "jvm_args": "", "eula": True, "installed": False,
+                "jvm_args": "", "eula": True, "installed": False, "template": "minecraft-java",
                 "preinstalled": bool(a.get("installed")) and same_loader,
                 "created": time.strftime("%Y-%m-%d %H:%M"),
                 "modpack": {"source": job.original_name, "kind": a.get("pack_kind"), "mods": a.get("mods_count"),
@@ -6308,7 +7116,11 @@ class Manager:
         shutil.rmtree(s.dir, ignore_errors=True)
 
     def shutdown_all(self):
-        running = [s for s in self.servers.values() if s.running()]
+        running = [s for s in self.servers.values() if s.running() and not isinstance(s, TemplateServer)]
+        others = [threading.Thread(target=s.stop_and_wait) for s in self.servers.values()
+                  if s.running() and isinstance(s, TemplateServer)]
+        for th in others:
+            th.start()
         for s in running:
             print(f"Apagando {s.meta.get('name')} (guardando el mundo)...")
             try:
@@ -6320,6 +7132,8 @@ class Manager:
                 s.proc.wait(timeout=90)
             except Exception:
                 s.proc.kill()
+        for th in others:
+            th.join()
         if self.playit:
             self.playit.stop()
 
@@ -7071,6 +7885,9 @@ class Handler(BaseHTTPRequestHandler):
                 pl.unlink()
                 return self.send_json(pl.state())
 
+        if method == "GET" and p == ["templates"]:
+            return self.send_json([t.to_json() for t in TEMPLATES.values()])
+
         if p == ["servers"]:
             if method == "GET":
                 return self.send_json([s.summary() for s in manager.servers.values()])
@@ -7081,6 +7898,9 @@ class Handler(BaseHTTPRequestHandler):
         if len(p) >= 2 and p[0] == "servers":
             s = manager.get(p[1])
             action = p[2] if len(p) > 2 else None
+            if isinstance(s, TemplateServer) and action not in (None, "start", "stop", "restart", "kill", "install",
+                                                                "log", "command"):
+                raise ValueError("Esta opción es solo para servidores de Minecraft.")
 
             if action is None:
                 if method == "GET":

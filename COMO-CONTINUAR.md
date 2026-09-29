@@ -102,6 +102,25 @@ Si le pides a Claude un cambio en otra conversación, dile que lea este archivo 
   `online-mode=false`, o de Mojang (`mojang_uuid()`). El motivo del ban se deja en una sola línea (sin caracteres
   de control), para que no se pueda colar otro comando en la consola.
 
+## Plantillas: servidores que no son de Minecraft (en desarrollo)
+
+- Diseño completo: https://claude.ai/code/artifact/d113ae82-62b1-4331-9c42-7045ff23e381 (fase 1 hecha: el motor).
+- Todo está en `servidor_home.py`, sección «Plantillas», porque las actualizaciones automáticas solo reemplazan
+  `servidor_home.py` y `web/` (`UPDATE_ALLOWED`): un archivo nuevo haría que las apps instaladas rechacen el paquete.
+  Por lo mismo, las plantillas incluidas van como dicts en `BUILTIN_TEMPLATES` y no como archivos `.toml`.
+- `Template` revisa una plantilla (esquema 1); `parse_template()` lee un `template.toml` (necesita Python 3.11+).
+  `TemplateServer` instala (descarga con sha256 obligatorio a `descargas/<plantilla>/`, extrae sin salir de la
+  carpeta), escribe los `[[files]]` con `{{ variable }}`, enciende, espera «listo» (línea del log o puerto abierto) y
+  apaga (comando por consola o señal, y a la fuerza si no responde a tiempo).
+- Minecraft sigue con `ServerInstance`: su plantilla `minecraft-java` tiene `handler = "minecraft"`. A los servidores
+  de antes se les anota `"template": "minecraft-java"` en `servidor-home.json` al abrir la app.
+- API: `GET /api/templates`; `POST /api/servers` con `{"template": "<id>", "values": {...}, "ports": {...}}`. Las
+  opciones de Minecraft (jugadores, mods, propiedades...) responden 400 en un servidor de plantilla. La interfaz
+  todavía no muestra plantillas nuevas: llega con las primeras (Terraria, Valheim...).
+- Pruebas: `python3 pruebas/plantillas/prueba_plantillas.py` (Linux, sin internet ni mock).
+- Pendiente en Windows: Ctrl+C no llega a un proceso sin consola; `stop.signal` manda CTRL_BREAK y, si el programa no
+  lo atiende, se cierra a la fuerza al vencer `timeout_s`. Preferir `stop.stdin` cuando el servidor lo permita.
+
 ## El modpack «Create: Volcanes y Estrellas»
 
 Está en `Documentos\servidor home\modpacks\` (versión 1.0.2; la 1.0.0 no arrancaba y la 1.0.1 botaba el servidor
