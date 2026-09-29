@@ -2,7 +2,7 @@
 Target amd64-unicode
 ManifestDPIAware true
 !define APPNAME "Servidor Home"
-!define APPVERSION "2.5.5"
+!define APPVERSION "2.5.8"
 !define UNINSTKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\ServidorHome"
 
 Name "${APPNAME}"

@@ -42,7 +42,7 @@ import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 APP_NAME = "Servidor Home"
-APP_VERSION = "2.5.5"
+APP_VERSION = "2.5.8"
 IS_WINDOWS = os.name == "nt"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 WEB_DIR = os.path.join(BASE_DIR, "web")
@@ -6968,8 +6968,10 @@ class Manager:
             self.servers.pop(sid, None)
         if self.remote:
             self.remote.revoke_server(sid)
+        # Con «\\?\» Windows acepta rutas de más de 260 letras (las librerías de los modpacks llegan a eso).
+        target = "\\\\?\\" + os.path.abspath(s.dir) if IS_WINDOWS else s.dir
         for attempt in range(3):
-            shutil.rmtree(s.dir, ignore_errors=True)
+            shutil.rmtree(target, ignore_errors=True)
             if not os.path.exists(s.dir):
                 return
             time.sleep(1 + attempt)          # Windows suelta los archivos de Java un momento después
