@@ -25,6 +25,7 @@ import shlex
 import shutil
 import signal
 import socket
+import ssl
 import subprocess
 import sys
 import tarfile
@@ -41,7 +42,7 @@ import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 APP_NAME = "Servidor Home"
-APP_VERSION = "2.5.5"
+APP_VERSION = "2.5.8"
 IS_WINDOWS = os.name == "nt"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 WEB_DIR = os.path.join(BASE_DIR, "web")
@@ -5634,6 +5635,649 @@ class Playit:
 
 
 # --------------------------------------------------------------------------- #
+# Administración remota: alguien de otra ciudad modera UN servidor desde SU Servidor Home
+# --------------------------------------------------------------------------- #
+# El dueño crea una invitación para un servidor y le pasa un código a su amigo, que lo pega en «Servidores de amigos»
+# de su propia app. Ninguno de los dos PC recibe conexiones de afuera (sin playit, sin abrir puertos ni tocar el
+# router): las dos apps se conectan hacia afuera a un buzón público de mensajes (MQTT, sin cuentas) y se dejan ahí
+# pedidos y respuestas. El código trae una clave de 256 bits que solo conocen las dos apps: de ella sale el nombre
+# del buzón (el buzón no sabe de quién es) y con ella cada mensaje va cifrado y firmado (HMAC-SHA256 como cifrado en
+# modo contador y como firma, solo con la biblioteca estándar). El buzón solo ve paquetes ilegibles; nadie puede
+# leer, repetir, cambiar ni inventar pedidos. Si un buzón no responde, se usa el siguiente de REMOTE_BROKERS.
+# Solo hay rutas sobre el servidor de la invitación: nada de mods, argumentos de Java, versiones ni borrar, porque
+# eso permitiría ejecutar programas en el PC del dueño.
+
+REMOTE_FILE = os.path.join(APPDATA_DIR, "acceso-remoto.json")
+FRIENDS_FILE = os.path.join(APPDATA_DIR, "servidores-de-amigos.json")
+# Buzones MQTT públicos y gratuitos (servidor, puerto, TLS). El dueño escucha en todos; el amigo usa el primero que
+# conecte. Ninguno necesita cuenta.
+REMOTE_BROKERS = [("broker.emqx.io", 8883, True), ("broker.hivemq.com", 8883, True), ("test.mosquitto.org", 8886, True)]
+REMOTE_TOPIC = "servidorhome/v1/"
+REMOTE_CLOCK_SKEW = 120            # segundos; si los relojes no calzan, la app del amigo se corrige sola
+REMOTE_TIMEOUT = 25                # segundos esperando la respuesta del PC del dueño
+REMOTE_PROPERTIES = [k for k in EDITABLE_PROPERTIES if k != "server-port"]
+REMOTE_ID_RE = re.compile(r"^[0-9a-f]{12}$")
+REMOTE_MAX_INVITES = 20
+REMOTE_CODE_PREFIX = "SH2."
+REMOTE_CONSOLE_LINES = 400         # un mensaje no debe ser enorme
+
+
+def _remote_keys(key_hex):
+    k = bytes.fromhex(key_hex)
+    return hmac.new(k, b"cifrar", hashlib.sha256).digest(), hmac.new(k, b"firmar", hashlib.sha256).digest()
+
+
+def remote_room(key_hex):
+    """El buzón de una invitación: sale de la clave, así que solo lo conocen las dos apps."""
+    return REMOTE_TOPIC + hmac.new(bytes.fromhex(key_hex), b"sala", hashlib.sha256).hexdigest()[:32]
+
+
+def _remote_xor(key, nonce, data):
+    """Cifrado en flujo: bloques HMAC-SHA256(clave, número al azar + contador) mezclados con XOR."""
+    if not data:
+        return b""
+    blocks = (len(data) + 31) // 32
+    stream = b"".join(hmac.new(key, nonce + i.to_bytes(8, "big"), hashlib.sha256).digest() for i in range(blocks))
+    return (int.from_bytes(data, "big") ^ int.from_bytes(stream[:len(data)], "big")).to_bytes(len(data), "big")
+
+
+def remote_seal(key_hex, kind, iid, obj, bind=b"", ts=None):
+    """Cifra y firma obj. kind es b"pedido" o b"respuesta"; bind ata una respuesta a su pedido."""
+    enc, mac = _remote_keys(key_hex)
+    ts = int(time.time()) if ts is None else int(ts)
+    nonce = secrets.token_bytes(16)
+    ct = _remote_xor(enc, kind + nonce, json.dumps(obj, ensure_ascii=False).encode("utf-8"))
+    tag = hmac.new(mac, b"|".join([kind, iid.encode(), str(ts).encode(), nonce, bind, ct]), hashlib.sha256).hexdigest()
+    return {"id": iid, "ts": ts, "nonce": nonce.hex(), "ct": base64.b64encode(ct).decode(), "mac": tag}
+
+
+def remote_open(key_hex, kind, env, bind=b""):
+    """Comprueba la firma y descifra. PermissionError si algo no calza."""
+    try:
+        iid, ts, nonce = str(env["id"]), int(env["ts"]), bytes.fromhex(env["nonce"])
+        ct = base64.b64decode(env["ct"], validate=True)
+        tag = str(env["mac"])
+    except (KeyError, TypeError, ValueError):
+        raise PermissionError("Mensaje no válido.")
+    if len(nonce) != 16:
+        raise PermissionError("Mensaje no válido.")
+    enc, mac = _remote_keys(key_hex)
+    want = hmac.new(mac, b"|".join([kind, iid.encode(), str(ts).encode(), nonce, bind, ct]), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(want, tag):
+        raise PermissionError("Firma no válida. Pídele un código nuevo al dueño del servidor.")
+    return json.loads(_remote_xor(enc, kind + nonce, ct).decode("utf-8")), ts, nonce
+
+
+def remote_code(inv):
+    raw = f"{inv['id']}|{inv['key']}".encode()
+    return REMOTE_CODE_PREFIX + base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+
+def parse_remote_code(code):
+    code = re.sub(r"\s+", "", str(code or ""))
+    if not code.startswith(REMOTE_CODE_PREFIX):
+        raise ValueError("Ese no es un código de acceso de Servidor Home (empieza con «SH2.»).")
+    body = code[len(REMOTE_CODE_PREFIX):]
+    try:
+        iid, key = base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)).decode().split("|")
+        bytes.fromhex(key)
+    except (ValueError, UnicodeDecodeError):
+        raise ValueError("El código está incompleto. Cópialo entero de nuevo.")
+    if not REMOTE_ID_RE.match(iid) or len(key) != 64:
+        raise ValueError("El código está incompleto. Cópialo entero de nuevo.")
+    return iid, key
+
+
+# ---- cliente MQTT 3.1.1 mínimo (solo QoS 0), con la biblioteca estándar ----
+
+def _mqtt_str(s):
+    b = s.encode("utf-8")
+    return len(b).to_bytes(2, "big") + b
+
+
+def _mqtt_packet(first, body):
+    n, size = len(body), bytearray()
+    while True:
+        n, digit = n >> 7, n & 0x7F
+        size.append(digit | (0x80 if n else 0))
+        if not n:
+            break
+    return bytes([first]) + bytes(size) + body
+
+
+class MqttClient:
+    """Una conexión hacia afuera con un buzón MQTT. Se reconecta sola y vuelve a suscribirse a sus temas."""
+
+    def __init__(self, host, port, tls, on_message, keepalive=30):
+        self.host, self.port, self.tls, self.on_message, self.keepalive = host, port, tls, on_message, keepalive
+        self.topics = set()
+        self.sock = None
+        self.lock = threading.Lock()          # para escribir en el socket
+        self.connected = threading.Event()
+        self.closed = False
+        self.error = None
+        self.pid = 0
+        self.acks = {}
+        threading.Thread(target=self._loop, daemon=True, name=f"mqtt-{host}").start()
+
+    @property
+    def name(self):
+        return f"{self.host}:{self.port}"
+
+    def _send(self, data):
+        with self.lock:
+            if not self.sock:
+                raise ConnectionError("sin conexión")
+            self.sock.sendall(data)
+
+    def _recv_exact(self, sock, n):
+        buf = b""
+        while len(buf) < n:
+            try:
+                chunk = sock.recv(n - len(buf))
+            except socket.timeout:
+                if time.time() - self.last_rx > self.keepalive * 2:
+                    raise ConnectionError("el buzón dejó de responder")
+                if not buf:
+                    raise
+                continue
+            if not chunk:
+                raise ConnectionError("el buzón cerró la conexión")
+            buf += chunk
+        self.last_rx = time.time()
+        return buf
+
+    def _read_packet(self, sock):
+        first = self._recv_exact(sock, 1)[0]
+        n, shift = 0, 0
+        while True:
+            b = self._recv_exact(sock, 1)[0]
+            n |= (b & 0x7F) << shift
+            if not b & 0x80:
+                break
+            shift += 7
+            if shift > 21:
+                raise ConnectionError("paquete MQTT no válido")
+        return first, self._recv_exact(sock, n) if n else b""
+
+    def _next_pid(self):
+        self.pid = self.pid % 65535 + 1
+        return self.pid
+
+    def _subscribe_packet(self, topic):
+        pid = self._next_pid()
+        ev = threading.Event()
+        self.acks[pid] = ev
+        return pid, ev, _mqtt_packet(0x82, pid.to_bytes(2, "big") + _mqtt_str(topic) + b"\x00")
+
+    def _connect(self):
+        sock = socket.create_connection((self.host, self.port), timeout=10)
+        if self.tls:
+            sock = ssl.create_default_context().wrap_socket(sock, server_hostname=self.host)
+        self.last_rx = time.time()
+        body = _mqtt_str("MQTT") + bytes([4, 0x02]) + self.keepalive.to_bytes(2, "big") + _mqtt_str("sh-" + secrets.token_hex(8))
+        sock.sendall(_mqtt_packet(0x10, body))
+        first, data = self._read_packet(sock)
+        if first >> 4 != 2 or len(data) < 2 or data[1] != 0:
+            sock.close()
+            raise ConnectionError("el buzón rechazó la conexión")
+        sock.settimeout(self.keepalive / 2)
+        return sock
+
+    def _loop(self):
+        backoff = 2
+        while not self.closed:
+            try:
+                sock = self._connect()
+            except (OSError, ValueError, ssl.SSLError) as e:
+                self.error = str(e)
+                time.sleep(backoff)
+                backoff = min(backoff * 2, 15)
+                continue
+            with self.lock:
+                self.sock = sock
+            backoff, self.error = 2, None
+            try:
+                for t in list(self.topics):
+                    self._send(self._subscribe_packet(t)[2])
+                self.connected.set()
+                while not self.closed:
+                    try:
+                        first, data = self._read_packet(sock)
+                    except socket.timeout:
+                        self._send(b"\xc0\x00")          # PINGREQ: seguimos aquí
+                        continue
+                    kind = first >> 4
+                    if kind == 3:                         # PUBLISH
+                        tl = int.from_bytes(data[:2], "big")
+                        topic = data[2:2 + tl].decode("utf-8", "replace")
+                        start = 2 + tl + (2 if (first >> 1) & 3 else 0)
+                        try:
+                            self.on_message(self, topic, data[start:])
+                        except Exception:
+                            traceback.print_exc()
+                    elif kind == 9 and len(data) >= 2:     # SUBACK
+                        ev = self.acks.pop(int.from_bytes(data[:2], "big"), None)
+                        if ev:
+                            ev.set()
+            except (OSError, ValueError, ssl.SSLError) as e:
+                self.error = str(e)
+            finally:
+                self.connected.clear()
+                with self.lock:
+                    self.sock = None
+                try:
+                    sock.close()
+                except OSError:
+                    pass
+            if not self.closed:
+                time.sleep(1)
+
+    def subscribe(self, topic, wait=0):
+        self.topics.add(topic)
+        if self.connected.is_set():
+            _pid, ev, pkt = self._subscribe_packet(topic)
+            try:
+                self._send(pkt)
+            except OSError:
+                return False
+            return ev.wait(wait) if wait else True
+        return False
+
+    def unsubscribe(self, topic):
+        self.topics.discard(topic)
+        if self.connected.is_set():
+            try:
+                self._send(_mqtt_packet(0xA2, self._next_pid().to_bytes(2, "big") + _mqtt_str(topic)))
+            except OSError:
+                pass
+
+    def publish(self, topic, payload):
+        self._send(_mqtt_packet(0x30, _mqtt_str(topic) + payload))
+
+    def close(self):
+        self.closed = True
+        with self.lock:
+            sock, self.sock = self.sock, None
+        if sock:
+            try:
+                sock.sendall(b"\xe0\x00")                 # DISCONNECT
+                sock.close()
+            except OSError:
+                pass
+
+
+class RemoteAccess:
+    """Lado del dueño: las invitaciones y los buzones donde escucha los pedidos de las apps de sus amigos."""
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.invites = [i for i in _read_json_list(REMOTE_FILE)
+                        if isinstance(i, dict) and REMOTE_ID_RE.match(str(i.get("id"))) and len(str(i.get("key"))) == 64]
+        self.nonces = {}              # mensajes ya recibidos → cuándo vencen (contra pedidos repetidos)
+        self.clients = []
+
+    # ---- invitaciones ----
+    def _save(self):
+        os.makedirs(os.path.dirname(REMOTE_FILE), exist_ok=True)
+        _write_json_list(REMOTE_FILE, self.invites)
+        if not IS_WINDOWS:
+            try:
+                os.chmod(REMOTE_FILE, 0o600)
+            except OSError:
+                pass
+
+    def wanted(self):
+        return bool(self.invites)
+
+    def create(self, sid, name):
+        name = re.sub(r"[\x00-\x1f\x7f]", " ", str(name or "")).strip()[:40]
+        if not name:
+            raise ValueError("Escribe el nombre de la persona que va a administrar el servidor.")
+        with self.lock:
+            if len(self.invites) >= REMOTE_MAX_INVITES:
+                raise RuntimeError("Hay demasiados accesos remotos. Quita alguno que ya no se use.")
+            inv = {"id": secrets.token_hex(6), "key": secrets.token_hex(32), "server": sid, "name": name,
+                   "created": int(time.time()), "used": 0}
+            self.invites.append(inv)
+            self._save()
+        self.start()
+        for c in self.clients:
+            c.subscribe(remote_room(inv["key"]) + "/p")
+        return inv
+
+    def _forget(self, gone):
+        for inv in gone:
+            for c in self.clients:
+                c.unsubscribe(remote_room(inv["key"]) + "/p")
+        if not self.invites:
+            self.stop()
+
+    def revoke(self, sid, iid):
+        with self.lock:
+            gone = [i for i in self.invites if i["id"] == iid and i["server"] == sid]
+            if not gone:
+                raise KeyError(iid)
+            self.invites = [i for i in self.invites if i not in gone]
+            self._save()
+        self._forget(gone)
+
+    def revoke_server(self, sid):
+        with self.lock:
+            gone = [i for i in self.invites if i["server"] == sid]
+            if gone:
+                self.invites = [i for i in self.invites if i["server"] != sid]
+                self._save()
+        self._forget(gone)
+
+    def state(self, sid):
+        on = [c for c in self.clients if c.connected.is_set()]
+        return {
+            "invites": [{"id": i["id"], "name": i["name"], "created": i["created"], "used": i.get("used", 0),
+                         "code": remote_code(i)} for i in self.invites if i["server"] == sid],
+            "listening": bool(self.clients), "connected": len(on), "brokers": len(self.clients),
+            "error": None if on or not self.clients else
+            ("No pude conectarme con ningún buzón de mensajes (" + "; ".join(c.error or "conectando" for c in self.clients)
+             + "). Revisa la conexión a internet de este PC."),
+        }
+
+    # ---- mensajes ----
+    def open_request(self, inv, env):
+        """Devuelve (pedido, número del pedido) o PermissionError."""
+        if str(env.get("id")) != inv["id"]:
+            raise PermissionError("Mensaje no válido.")
+        req, ts, nonce = remote_open(inv["key"], b"pedido", env)
+        now = time.time()
+        if abs(now - ts) > REMOTE_CLOCK_SKEW:
+            raise PermissionError("hora")
+        with self.lock:
+            for k in [k for k, exp in self.nonces.items() if exp < now]:
+                del self.nonces[k]
+            if nonce in self.nonces:
+                raise PermissionError("Pedido repetido.")
+            self.nonces[nonce] = now + 2 * REMOTE_CLOCK_SKEW
+            if now - inv.get("used", 0) > 60:
+                inv["used"] = int(now)
+                try:
+                    self._save()
+                except OSError:
+                    pass
+        if not isinstance(req, dict):
+            raise PermissionError("Mensaje no válido.")
+        return req, nonce
+
+    def _on_message(self, client, topic, payload):
+        inv = next((i for i in self.invites if remote_room(i["key"]) + "/p" == topic), None)
+        if inv:
+            threading.Thread(target=self._handle, args=(client, inv, payload), daemon=True).start()
+
+    def _handle(self, client, inv, payload):
+        reply_to = remote_room(inv["key"]) + "/r"
+        re_ = ""
+        try:
+            env = json.loads(payload.decode("utf-8"))
+            if not isinstance(env, dict):
+                return
+            re_ = str(env.get("nonce") or "")[:32]
+            req, nonce = self.open_request(inv, env)
+        except PermissionError as e:
+            try:
+                client.publish(reply_to, json.dumps({"re": re_, "error": str(e), "auth": True,
+                                                     "t": int(time.time())}).encode())
+            except OSError:
+                pass
+            return
+        except (ValueError, UnicodeDecodeError):
+            return
+        try:
+            code, data = remote_action(inv, str(req.get("method") or "GET"), str(req.get("path") or ""),
+                                       req.get("body") if isinstance(req.get("body"), dict) else {})
+        except KeyError:
+            code, data = 404, {"error": "No encontrado."}
+        except (ValueError, RuntimeError, PermissionError) as e:
+            code, data = 400, {"error": str(e)}
+        except Exception as e:
+            traceback.print_exc()
+            code, data = 500, {"error": f"Error interno: {e}"}
+        out = remote_seal(inv["key"], b"respuesta", inv["id"], {"status": code, "data": data}, bind=nonce)
+        out["re"] = nonce.hex()
+        try:
+            client.publish(reply_to, json.dumps(out).encode())
+        except OSError:
+            pass
+
+    # ---- buzones ----
+    def start(self):
+        with self.lock:
+            if self.clients:
+                return
+            self.clients = [MqttClient(h, p, tls, self._on_message) for h, p, tls in REMOTE_BROKERS]
+            for c in self.clients:
+                for inv in self.invites:
+                    c.topics.add(remote_room(inv["key"]) + "/p")
+
+    def stop(self):
+        with self.lock:
+            clients, self.clients = self.clients, []
+        for c in clients:
+            c.close()
+
+
+def remote_action(inv, method, path, data):
+    """Lo único que se puede hacer desde afuera, siempre sobre el servidor de la invitación. Devuelve (código, datos)."""
+    s = manager.servers.get(inv["server"])
+    if not s:
+        return 404, {"error": "Ese servidor ya no existe en el PC de tu amigo."}
+    u = urllib.parse.urlparse(path)
+    p = u.path.strip("/")
+    q = {k: v[0] for k, v in urllib.parse.parse_qs(u.query).items()}
+    who = inv["name"]
+
+    if method == "GET" and p == "estado":
+        d = s.summary()
+        keep = ("name", "type_label", "mc_version", "loader_version", "status", "error", "hint", "players",
+                "max_players", "online_mode", "whitelist", "uptime", "mods_active", "addons_dir", "installed", "progress")
+        out = {k: d.get(k) for k in keep}
+        out["admin"] = who
+        out["address"] = manager.playit.address() if manager.playit else None
+        return 200, out
+    if method == "POST" and p in ("encender", "apagar", "reiniciar", "forzar"):
+        if p == "encender":
+            s.log(f"{who} enciende el servidor (acceso remoto).")
+            s.start(user=True)
+        elif p == "apagar":
+            s.log(f"{who} apaga el servidor (acceso remoto).")
+            s.stop()
+        elif p == "reiniciar":
+            s.log(f"{who} reinicia el servidor (acceso remoto).")
+            s.stop(restart=True)
+        else:
+            s.log(f"{who} fuerza el cierre del servidor (acceso remoto).", "err")
+            s.kill()
+        return 200, {"ok": True, "status": s.status}
+    if method == "GET" and p == "consola":
+        last, lines = s.console.since(int(q.get("since", 0)))
+        lines = lines[-REMOTE_CONSOLE_LINES:]
+        return 200, {"last": last, "lines": lines, "status": s.status, "players": sorted(s.players)}
+    if method == "POST" and p == "comando":
+        cmd = re.sub(r"[\x00-\x1f\x7f]", " ", str(data.get("command") or "")).strip()[:300]
+        if not cmd:
+            raise ValueError("Escribe un comando.")
+        s.console.add(f"({who} desde el acceso remoto)", "app")
+        s.send(cmd)
+        return 200, {"ok": True}
+    if p == "jugadores":
+        if method == "GET":
+            return 200, s.players_info()
+        if method == "POST":
+            s.log(f"{who}: {data.get('action')} {data.get('name')} (acceso remoto).")
+            return 200, s.player_action(data.get("action"), data.get("name"), data.get("reason", ""))
+    if p == "propiedades":
+        path = os.path.join(s.dir, "server.properties")
+        if method == "GET":
+            props = read_properties(path)
+            out = {k: props.get(k, "") for k in REMOTE_PROPERTIES}
+            out["motd"] = prop_unescape(out["motd"])
+            return 200, out
+        if method == "PUT":
+            clean = {}
+            for k, v in (data.get("properties") or {}).items():
+                if k not in REMOTE_PROPERTIES:
+                    raise ValueError(f"Ese ajuste solo lo puede cambiar el dueño: {k}")
+                clean[k] = clean_prop_value(v)
+            if "motd" in clean:
+                clean["motd"] = prop_escape(clean["motd"])
+            write_properties(path, clean)
+            s.log(f"{who} cambió los ajustes ({', '.join(clean) or 'ninguno'}) desde el acceso remoto. "
+                  "Se aplican la próxima vez que se encienda.")
+            return 200, {"ok": True}
+    if p == "respaldos":
+        if method == "GET":
+            return 200, s.list_backups()
+        if method == "POST":
+            name = s.backup()
+            s.log(f"Respaldo pedido por {who} (acceso remoto).")
+            return 200, {"name": name}
+    raise KeyError()
+
+
+class RemoteFriends:
+    """Lado del amigo: los servidores de otras personas que puede administrar con un código."""
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.items = [f for f in _read_json_list(FRIENDS_FILE)
+                      if isinstance(f, dict) and f.get("fid") and REMOTE_ID_RE.match(str(f.get("id"))) and f.get("key")]
+        self.offsets = {}             # diferencia de reloj con el PC de cada amigo
+        self.clients = {}             # buzón (índice en REMOTE_BROKERS) → MqttClient, abiertos cuando se usan
+        self.best = 0                 # el último buzón que funcionó
+        self.waiting = {}             # número de pedido → [Event, respuesta]
+
+    def _save(self):
+        os.makedirs(os.path.dirname(FRIENDS_FILE), exist_ok=True)
+        _write_json_list(FRIENDS_FILE, self.items)
+        if not IS_WINDOWS:
+            try:
+                os.chmod(FRIENDS_FILE, 0o600)
+            except OSError:
+                pass
+
+    def list(self):
+        return [{"id": f["fid"], "name": f.get("name") or "?", "admin": f.get("admin"), "added": f.get("added")}
+                for f in self.items]
+
+    def get(self, fid):
+        f = next((f for f in self.items if f["fid"] == fid), None)
+        if not f:
+            raise KeyError(fid)
+        return f
+
+    def add(self, code):
+        iid, key = parse_remote_code(code)
+        entry = {"fid": secrets.token_hex(4), "id": iid, "key": key, "added": int(time.time())}
+        status, d = self._call(entry, "GET", "estado")
+        if status != 200:
+            raise RuntimeError(d.get("error") or "El PC de tu amigo no aceptó el código.")
+        entry["name"], entry["admin"] = d.get("name"), d.get("admin")
+        with self.lock:
+            old = next((f for f in self.items if f["id"] == iid), None)
+            if old:
+                entry["fid"] = old["fid"]
+                self.items.remove(old)
+            self.items.append(entry)
+            self._save()
+        return {"id": entry["fid"], "name": entry["name"]}
+
+    def remove(self, fid):
+        with self.lock:
+            f = self.get(fid)
+            self.items.remove(f)
+            self._save()
+        for c in self.clients.values():
+            c.unsubscribe(remote_room(f["key"]) + "/r")
+
+    def request(self, fid, method, path, body=None):
+        f = self.get(fid)
+        status, data = self._call(f, method, path, body)
+        if status == 200 and path == "estado" and data.get("name") and data.get("name") != f.get("name"):
+            f["name"] = data["name"]
+            try:
+                self._save()
+            except OSError:
+                pass
+        return status, data
+
+    def _on_message(self, client, topic, payload):
+        try:
+            msg = json.loads(payload.decode("utf-8"))
+            slot = self.waiting.get(str(msg.get("re")))
+        except (ValueError, UnicodeDecodeError, AttributeError):
+            return
+        if slot and slot[1] is None:
+            slot[1] = msg
+            slot[0].set()
+
+    def _client(self, idx):
+        c = self.clients.get(idx)
+        if not c:
+            h, p, tls = REMOTE_BROKERS[idx]
+            c = self.clients[idx] = MqttClient(h, p, tls, self._on_message)
+        return c
+
+    def _broker_for(self, room):
+        """El primer buzón que conecte (empezando por el que funcionó la última vez), ya suscrito a las respuestas."""
+        errors = []
+        order = [(self.best + i) % len(REMOTE_BROKERS) for i in range(len(REMOTE_BROKERS))]
+        for idx in order:
+            c = self._client(idx)
+            if not c.connected.wait(8 if not errors else 5):
+                errors.append(c.error or "no responde")
+                continue
+            if room not in c.topics or not c.connected.is_set():
+                if not c.subscribe(room, wait=5):
+                    errors.append("no aceptó la suscripción")
+                    continue
+            self.best = idx
+            return c
+        raise RuntimeError("No pude conectarme con ningún buzón de mensajes (" + "; ".join(errors) +
+                           "). Revisa tu conexión a internet.")
+
+    def _call(self, f, method, path, body=None, retry=True):
+        room = remote_room(f["key"])
+        c = self._broker_for(room + "/r")
+        env = remote_seal(f["key"], b"pedido", f["id"], {"method": method, "path": path, "body": body or {}},
+                          ts=time.time() + self.offsets.get(f["id"], 0))
+        slot = self.waiting[env["nonce"]] = [threading.Event(), None]
+        try:
+            try:
+                c.publish(room + "/p", json.dumps(env).encode())
+            except OSError:
+                raise RuntimeError("Se cortó la conexión con el buzón de mensajes. Inténtalo de nuevo.")
+            wait = 120 if path.startswith("respaldos") and method == "POST" else REMOTE_TIMEOUT
+            if not slot[0].wait(wait):
+                raise RuntimeError("El PC de tu amigo no responde. Revisa que esté encendido y con Servidor Home "
+                                   "abierto.")
+        finally:
+            self.waiting.pop(env["nonce"], None)
+        reply = slot[1]
+        if reply.get("auth"):
+            if reply.get("error") == "hora" and retry and isinstance(reply.get("t"), int):
+                self.offsets[f["id"]] = reply["t"] - time.time()        # relojes distintos: corregimos y reintentamos
+                return self._call(f, method, path, body, retry=False)
+            return 401, {"error": reply.get("error") or "El PC de tu amigo rechazó el acceso.", "auth": True}
+        try:
+            inner, _ts, _n = remote_open(f["key"], b"respuesta", reply, bind=bytes.fromhex(env["nonce"]))
+        except (PermissionError, ValueError, AttributeError, TypeError):
+            raise RuntimeError("La respuesta del PC de tu amigo llegó alterada o no es válida.")
+        return int(inner.get("status") or 500), inner.get("data")
+
+    def stop(self):
+        for c in list(self.clients.values()):
+            c.close()
+        self.clients = {}
+
+
+# --------------------------------------------------------------------------- #
 # Actualizaciones automáticas
 # --------------------------------------------------------------------------- #
 # Cada versión nueva se publica en GitHub (Releases) con tres archivos:
@@ -6178,6 +6822,8 @@ class Manager:
             elif os.path.exists(os.path.join(full, STAGING_MARK)):
                 shutil.rmtree(full, ignore_errors=True)   # importación que quedó a medias
         self.playit = None
+        self.remote = None
+        self.friends = None
 
     def get(self, sid):
         s = self.servers.get(sid)
@@ -6298,14 +6944,39 @@ class Manager:
             self.imports.pop(job.id, None)
 
     def delete(self, sid):
+        """Borra el servidor, su mundo y sus respaldos. Si está encendido, primero lo apaga guardando el mundo."""
         s = self.get(sid)
-        if s.running():
-            raise RuntimeError("Apaga el servidor antes de borrarlo.")
         if s.repair_busy or s.status in ("instalando", "reparando"):
-            raise RuntimeError("Espera a que termine la instalación.")
+            raise RuntimeError("Espera a que termine la instalación o el arreglo antes de borrarlo.")
+        if s.running():
+            proc = s.proc
+            s.log("Apagando el servidor para borrarlo…")
+            try:
+                s.stop(timeout=60)
+            except RuntimeError:
+                pass
+            try:
+                proc.wait(timeout=75)
+            except subprocess.TimeoutExpired:
+                s.kill()
+                proc.wait(timeout=15)
+            for _ in range(40):              # que termine de leer la consola antes de borrar la carpeta
+                if s.status not in ("deteniendo", "en línea", "iniciando"):
+                    break
+                time.sleep(0.25)
         with self.lock:
-            del self.servers[sid]
-        shutil.rmtree(s.dir, ignore_errors=True)
+            self.servers.pop(sid, None)
+        if self.remote:
+            self.remote.revoke_server(sid)
+        # Con «\\?\» Windows acepta rutas de más de 260 letras (las librerías de los modpacks llegan a eso).
+        target = "\\\\?\\" + os.path.abspath(s.dir) if IS_WINDOWS else s.dir
+        for attempt in range(3):
+            shutil.rmtree(target, ignore_errors=True)
+            if not os.path.exists(s.dir):
+                return
+            time.sleep(1 + attempt)          # Windows suelta los archivos de Java un momento después
+        raise RuntimeError(f"El servidor se quitó de la lista, pero algunos archivos siguen en uso y no se "
+                           f"pudieron borrar. Puedes borrar la carpeta a mano: {s.dir}")
 
     def shutdown_all(self):
         running = [s for s in self.servers.values() if s.running()]
@@ -6320,6 +6991,10 @@ class Manager:
                 s.proc.wait(timeout=90)
             except Exception:
                 s.proc.kill()
+        if self.remote:
+            self.remote.stop()
+        if self.friends:
+            self.friends.stop()
         if self.playit:
             self.playit.stop()
 
@@ -6922,6 +7597,8 @@ class Handler(BaseHTTPRequestHandler):
     def dispatch(self, method, parts, q):
         if method == "GET" and (not parts or parts == ["index.html"]):
             return self.send_file(os.path.join(WEB_DIR, "index.html"), "text/html; charset=utf-8")
+        if method == "GET" and parts == ["remoto"]:             # panel de un servidor de un amigo
+            return self.send_file(os.path.join(WEB_DIR, "remoto.html"), "text/html; charset=utf-8", no_store=True)
         if not parts or parts[0] != "api":
             raise KeyError()
         p = parts[1:]
@@ -7050,6 +7727,25 @@ class Handler(BaseHTTPRequestHandler):
                     s = manager.confirm_import(job, self.body_json())
                     return self.send_json(s.summary(), 201)
 
+        # ---- servidores de amigos (acceso remoto, lado del amigo) ----
+        if p and p[0] == "amigos":
+            fr = manager.friends
+            if p == ["amigos"]:
+                if method == "GET":
+                    return self.send_json(fr.list())
+                if method == "POST":
+                    return self.send_json(fr.add(self.body_json().get("code")), 201)
+            if method == "DELETE" and len(p) == 2:
+                fr.remove(p[1])
+                return self.send_json({"ok": True})
+            if len(p) >= 3:
+                query = urllib.parse.urlparse(self.path).query
+                path = "/".join(p[2:]) + ("?" + query if query else "")
+                body = self.body_json() if method in ("POST", "PUT") else None
+                status, data = fr.request(p[1], method, path, body)
+                return self.send_json(data if data is not None else {}, status)
+            raise KeyError()
+
         # ---- playit.gg ----
         if p and p[0] == "playit":
             pl = manager.playit
@@ -7109,6 +7805,19 @@ class Handler(BaseHTTPRequestHandler):
                 elif action == "install":
                     s.install()
                 return self.send_json(s.summary())
+
+            if action == "remoto":
+                ra = manager.remote
+                if method == "GET" and len(p) == 3:
+                    return self.send_json(ra.state(s.id))
+                if method == "POST" and len(p) == 3:
+                    ra.create(s.id, self.body_json().get("name"))
+                    s.log("Se creó un acceso remoto para administrar este servidor.")
+                    return self.send_json(ra.state(s.id), 201)
+                if method == "DELETE" and len(p) == 4:
+                    ra.revoke(s.id, p[3])
+                    s.log("Se quitó un acceso remoto.")
+                    return self.send_json(ra.state(s.id))
 
             if method == "POST" and action == "fix":
                 s.fix(self.body_json().get("action") or {})
@@ -7519,6 +8228,10 @@ def main():
         adopt_portable_data()
     manager = Manager()
     manager.playit = Playit()
+    manager.remote = RemoteAccess()
+    manager.friends = RemoteFriends()
+    if manager.remote.wanted():
+        manager.remote.start()
     UPDATER.start()
     if IS_WINDOWS:
         try:

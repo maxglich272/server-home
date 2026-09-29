@@ -102,6 +102,34 @@ Si le pides a Claude un cambio en otra conversación, dile que lea este archivo 
   `online-mode=false`, o de Mojang (`mojang_uuid()`). El motivo del ban se deja en una sola línea (sin caracteres
   de control), para que no se pueda colar otro comando en la consola.
 
+## Borrar servidores y acceso remoto (después de la 2.5.5)
+
+- **Borrar:** botón «Borrar servidor» arriba, en la tarjeta del servidor (y el de siempre en Ajustes → Opciones
+  avanzadas). Pide escribir el nombre. `Manager.delete()` apaga el servidor guardando el mundo si está encendido,
+  quita sus accesos remotos y reintenta borrar la carpeta si Windows todavía tiene archivos tomados.
+- **Acceso remoto (solo entre apps, sin playit ni router):** pestaña «Acceso remoto» de cada servidor. El dueño
+  crea un código por persona (`SH2.` + base64 de `id|clave`, clave de 256 bits) y se lo pasa. El amigo necesita
+  Servidor Home: lo pega en «Servidores de amigos» (inicio) y administra desde `/remoto?f=<id>` de su propia app
+  (`RemoteFriends`, rutas `api/amigos/...`). playit.gg queda solo para la dirección del juego (decisión del dueño).
+  - Ningún PC recibe conexiones: las dos apps se conectan hacia afuera a buzones MQTT públicos y sin cuenta
+    (`REMOTE_BROKERS`: EMQX, HiveMQ y Mosquitto, con TLS) con `MqttClient`, un cliente MQTT 3.1.1 mínimo (QoS 0)
+    que se reconecta solo. El dueño (`RemoteAccess`) escucha en todos mientras haya invitaciones; el amigo usa el
+    primero que conecte y recuerda cuál funcionó.
+  - El tema del buzón sale de la clave (`remote_room`: `servidorhome/v1/<hmac>` + `/p` pedidos y `/r` respuestas):
+    el buzón no sabe de quién es. Pedido y respuesta van cifrados y firmados (`remote_seal` / `remote_open`:
+    HMAC-SHA256 en modo contador para cifrar y HMAC-SHA256 para firmar, solo biblioteca estándar). Se rechazan
+    firmas malas, mensajes repetidos y horas con más de 2 minutos de diferencia (la app del amigo corrige su reloj
+    con el `t` del error `hora`). Cada respuesta va atada al número de su pedido (`re`).
+  - Las invitaciones están en `acceso-remoto.json` y, en el PC del amigo, los servidores en
+    `servidores-de-amigos.json` (junto a `ajustes.json`, permisos 600 en Linux).
+  - `remote_action()` solo tiene rutas sobre el servidor de la invitación: estado, encender/apagar/reiniciar/forzar,
+    consola y comandos, jugadores, ajustes del juego (`REMOTE_PROPERTIES`: sin puerto ni rcon) y crear respaldos.
+    A propósito no hay mods, argumentos de Java, versiones ni borrar: con eso se podrían ejecutar programas en el
+    PC del dueño. Todo lo que hace el amigo queda en la consola y en `servidor-home.log` con su nombre.
+  - Los buzones públicos son gratuitos y sin garantía: si todos fallan, la app lo dice. Para cambiarlos o agregar
+    uno propio, basta editar `REMOTE_BROKERS` (las dos apps deben compartir al menos uno).
+  - Pruebas: `pruebas/t2/harness_remoto.py` con un buzón local (`pruebas/t2/mini_broker.py`).
+
 ## El modpack «Create: Volcanes y Estrellas»
 
 Está en `Documentos\servidor home\modpacks\` (versión 1.0.2; la 1.0.0 no arrancaba y la 1.0.1 botaba el servidor

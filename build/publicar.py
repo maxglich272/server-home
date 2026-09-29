@@ -42,7 +42,7 @@ Cuando sale una versión nueva, cada Servidor Home instalado la descarga, compru
 publicó el autor y la instala cuando no hay servidores encendidos, así que nunca corta una partida.
 Las novedades de cada versión están en [Releases](https://{where}/releases).
 """
-APP_FILES = ["servidor_home.py", "README.md", "web/index.html", "web/icono.svg", "web/icono.ico"]
+APP_FILES = ["servidor_home.py", "README.md", "web/index.html", "web/remoto.html", "web/icono.svg", "web/icono.ico"]
 
 
 def rsa_sign(message, key):

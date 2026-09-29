@@ -2,7 +2,7 @@
 Target amd64-unicode
 ManifestDPIAware true
 !define APPNAME "Servidor Home"
-!define APPVERSION "2.5.5"
+!define APPVERSION "2.5.8"
 !define UNINSTKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\ServidorHome"
 
 Name "${APPNAME}"
@@ -65,6 +65,7 @@ Section "Servidor Home"
   File "app\README.md"
   SetOutPath "$INSTDIR\web"
   File "app\web\index.html"
+  File "app\web\remoto.html"
   File "app\web\icono.svg"
   File "app\web\icono.ico"
   SetOutPath "$INSTDIR\python"

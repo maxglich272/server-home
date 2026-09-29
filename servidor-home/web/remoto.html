@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Servidor Home · Servidor de un amigo</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%235a8f29'/%3E%3Crect y='5' width='16' height='11' fill='%23795533'/%3E%3Crect y='5' width='16' height='2' fill='%236aa531'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#0f1114; --panel:#181b20; --panel2:#20242b; --panel3:#262b33; --line:#2c3139; --text:#eceef1; --muted:#98a0ab;
+  --green:#72c94f; --green-d:#4a9630; --red:#ef5b52; --red-d:#b8403a; --amber:#e8b64a; --blue:#63adff;
+  --mono:ui-monospace,"JetBrains Mono","Cascadia Code",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--text);font:15px/1.5 "Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,Roboto,Ubuntu,sans-serif;min-height:100vh}
+button,input,select{font:inherit;color:inherit}
+.wrap{max-width:980px;margin:0 auto;padding:0 16px 50px}
+header{display:flex;align-items:center;gap:12px;padding:16px;max-width:980px;margin:0 auto}
+header h1{font-size:17px;margin:0;font-weight:750}
+header h1 small{display:block;font-size:12px;font-weight:500;color:var(--muted)}
+header .sp{flex:1}
+.logo{width:32px;height:32px;image-rendering:pixelated;border-radius:8px;flex:none}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:14px}
+.card h3{margin:0 0 10px;font-size:16px}
+.muted{color:var(--muted)} .small{font-size:13.5px} .hide{display:none!important}
+.btn{border:1px solid var(--line);background:var(--panel2);padding:8px 15px;border-radius:10px;cursor:pointer;display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.btn:hover{border-color:#4a525e} .btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.primary{background:linear-gradient(180deg,#58a93a,var(--green-d));border-color:#5aa83c;color:#fff;font-weight:650}
+.btn.stop{background:var(--red-d);border-color:var(--red-d);color:#fff;font-weight:650}
+.btn.danger{color:var(--red)}
+.btn.sm{padding:5px 11px;font-size:13.5px;border-radius:8px}
+.hero{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.hero .info{flex:1;min-width:220px}
+.hero h2{margin:0;font-size:24px;line-height:1.2}
+.sicon{width:56px;height:56px;border-radius:12px;image-rendering:pixelated;border:1px solid var(--line);flex:none}
+.status{margin-top:8px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.dot{width:11px;height:11px;border-radius:50%;background:#5a626e;flex:none;display:inline-block}
+.dot.on{background:var(--green);box-shadow:0 0 8px var(--green)} .dot.busy{background:var(--amber)} .dot.err{background:var(--red)}
+.acts{display:flex;gap:8px;flex-wrap:wrap}
+.address{font:600 17px/1.3 var(--mono);word-break:break-all}
+.hint{margin-top:12px;background:#2b1d1c;border:1px solid #5f2724;border-radius:10px;padding:10px 12px;white-space:pre-wrap;font-size:14px}
+.tabs{display:flex;gap:6px;margin:18px 0 12px;overflow-x:auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:5px}
+.tab{padding:8px 15px;cursor:pointer;color:var(--muted);border-radius:10px;white-space:nowrap;font-weight:550}
+.tab.act{color:var(--text);background:var(--panel3)}
+.console{background:#0c0e11;border:1px solid var(--line);border-radius:12px;height:50vh;min-height:240px;overflow:auto;padding:10px 12px;font:12.5px/1.5 var(--mono);white-space:pre-wrap;word-break:break-word}
+.console .k-app{color:var(--blue)} .console .k-err{color:var(--red)} .console .k-cmd{color:var(--amber)} .console .k-warn{color:#d9b35a} .console .t{color:#555d68;margin-right:8px}
+.cmdline{display:flex;gap:8px;margin-top:8px}
+.cmdline input{flex:1;font-family:var(--mono)}
+input[type=text],input[type=number],select{background:#0e1013;border:1px solid var(--line);border-radius:9px;padding:8px 10px;outline:none;width:100%}
+input:focus,select:focus{border-color:var(--green-d)}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}
+label.f{display:flex;flex-direction:column;gap:5px;font-size:13.5px;color:var(--muted)}
+label.f > span{color:var(--text);font-weight:550}
+.foot{display:flex;justify-content:flex-end;gap:10px;margin-top:16px}
+.prow{display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px 12px;flex-wrap:wrap;margin-bottom:8px}
+.prow .who{flex:1;min-width:150px}
+.badge{font-size:11.5px;font-weight:700;padding:1px 8px;border-radius:6px;margin-left:6px}
+.badge.op{background:#2b2410;color:#f0c75a}.badge.wl{background:#14263a;color:#8cc4ff}.badge.ban{background:#34191a;color:#ff8f87}
+table{width:100%;border-collapse:collapse}
+td{padding:7px 8px;border-bottom:1px solid var(--line);font-size:14px}
+.gate{text-align:center;padding:12vh 16px}
+.gate h2{font-size:24px;margin:14px 0 8px}
+.toast{position:fixed;right:16px;bottom:16px;left:16px;margin-left:auto;background:var(--panel2);border:1px solid var(--line);border-left:4px solid var(--green);padding:11px 15px;border-radius:9px;max-width:420px;z-index:20;white-space:pre-wrap}
+.toast.err{border-left-color:var(--red)}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.62);display:flex;align-items:center;justify-content:center;padding:16px;z-index:30}
+.modal{background:var(--panel);border:1px solid var(--line);border-radius:16px;width:min(440px,100%);padding:20px}
+@media (max-width:640px){ header h1 small{display:none} .hero h2{font-size:20px} }
+</style>
+</head>
+<body>
+<header>
+  <svg class="logo" viewBox="0 0 16 16"><rect width="16" height="16" fill="#5a8f29"/><rect y="5" width="16" height="11" fill="#795533"/><rect y="5" width="16" height="2" fill="#6aa531"/><rect x="2" y="9" width="2" height="2" fill="#634329"/><rect x="9" y="11" width="2" height="2" fill="#634329"/></svg>
+  <h1>Servidor Home<small>Servidor de un amigo</small></h1>
+  <div class="sp"></div>
+  <span class="muted small" id="who"></span>
+  <a class="btn sm" href="/" style="text-decoration:none;color:inherit">← Mis servidores</a>
+</header>
+
+<div class="wrap">
+  <section class="gate hide" id="gate">
+    <h2 id="gateTitle">Conectando…</h2>
+    <p class="muted" id="gateText">Conectando con el PC de tu amigo.</p>
+  </section>
+
+  <section class="hide" id="view">
+    <div class="card">
+      <div class="hero">
+        <div class="info">
+          <h2 id="vName"></h2>
+          <div class="muted small" id="vSub"></div>
+          <div class="status"><span class="dot" id="vDot"></span><span id="vStatus"></span></div>
+        </div>
+        <div class="acts">
+          <button class="btn primary" id="bStart">Encender</button>
+          <button class="btn" id="bRestart">Reiniciar</button>
+          <button class="btn stop" id="bStop">Apagar</button>
+        </div>
+      </div>
+      <div class="hint hide" id="vHint"></div>
+      <div class="row" style="margin-top:12px" id="addrRow"><span class="muted small">Dirección para entrar al juego:</span><span class="address" id="vAddr"></span></div>
+    </div>
+
+    <div class="tabs">
+      <div class="tab act" data-t="console">Consola</div>
+      <div class="tab" data-t="players">Jugadores</div>
+      <div class="tab" data-t="settings">Ajustes</div>
+      <div class="tab" data-t="backups">Respaldos</div>
+    </div>
+
+    <section data-p="console">
+      <div class="console" id="console"></div>
+      <div class="cmdline">
+        <input type="text" id="cmd" placeholder="Comando del servidor (ej: say hola, time set day, tp Ana Beto)" autocomplete="off" maxlength="300">
+        <button class="btn" id="bSend">Enviar</button>
+      </div>
+    </section>
+
+    <section data-p="players" class="hide">
+      <div class="card" style="padding:14px 16px">
+        <div class="row">
+          <input type="text" id="pAdd" placeholder="Nombre de un jugador (exacto, como en Minecraft)" style="max-width:300px" maxlength="16" autocomplete="off">
+          <button class="btn sm" data-padd="whitelist_add">Agregar a la lista blanca</button>
+          <button class="btn sm" data-padd="op">Hacer admin</button>
+          <button class="btn sm danger" data-padd="ban">Banear</button>
+        </div>
+        <div class="muted small" id="pNote" style="margin-top:8px"></div>
+      </div>
+      <div id="pList"></div>
+    </section>
+
+    <section data-p="settings" class="hide">
+      <div class="card">
+        <h3>Ajustes del juego</h3>
+        <p class="muted small" style="margin-top:-4px">Se aplican la próxima vez que se encienda el servidor. Los mods, la memoria y la versión solo los cambia el dueño.</p>
+        <div class="grid" id="props"></div>
+        <div class="foot"><button class="btn primary" id="bSaveProps">Guardar</button></div>
+      </div>
+    </section>
+
+    <section data-p="backups" class="hide">
+      <div class="row" style="margin-bottom:12px"><button class="btn primary" id="bBackup">Respaldar el mundo ahora</button><span class="muted small">Funciona con el servidor encendido. El respaldo queda en el PC del servidor.</span></div>
+      <table><tbody id="backupList"></tbody></table>
+    </section>
+  </section>
+</div>
+
+<script>
+'use strict';
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+/* ---- un servidor de un amigo: esta app habla con la suya (cifrado) y aquí solo se usa /api/amigos ---- */
+const FID = new URLSearchParams(location.search).get('f') || '';
+let STOPPED = false;
+async function api(path, opts = {}) {
+  const o = { method: opts.method || 'GET', headers: {}, cache: 'no-store' };
+  if (opts.json !== undefined) { o.body = JSON.stringify(opts.json); o.headers['Content-Type'] = 'application/json'; }
+  const r = await fetch(`/api/amigos/${encodeURIComponent(FID)}/${path}`, o);
+  const data = await r.json().catch(() => ({}));
+  if (r.status === 401 && data.auth) gate('Sin acceso', data.error);
+  if (!r.ok) throw new Error(data.error || ('Error ' + r.status));
+  return data;
+}
+function gate(title, text) {
+  STOPPED = true;
+  $('#gateTitle').textContent = title; $('#gateText').textContent = text;
+  $('#gate').classList.remove('hide'); $('#view').classList.add('hide');
+}
+function toast(msg, err) {
+  const t = document.createElement('div'); t.className = 'toast' + (err ? ' err' : ''); t.textContent = msg;
+  document.body.appendChild(t); setTimeout(() => t.remove(), err ? 7000 : 3000);
+}
+async function act(fn, okMsg) { try { const r = await fn(); if (okMsg) toast(okMsg); return r; } catch (e) { toast(e.message, true); } }
+function ask(text, okLabel, danger, input) {
+  return new Promise(resolve => {
+    const bg = document.createElement('div'); bg.className = 'modal-bg';
+    bg.innerHTML = `<div class="modal"><div style="white-space:pre-wrap">${esc(text)}</div>
+      ${input ? `<input type="text" class="ask-in" maxlength="120" placeholder="${esc(input)}" style="margin-top:12px">` : ''}
+      <div class="foot"><button class="btn" data-a="0">Cancelar</button><button class="btn ${danger ? 'stop' : 'primary'}" data-a="1">${esc(okLabel)}</button></div></div>`;
+    const inp = bg.querySelector('.ask-in');
+    bg.onclick = e => { const a = e.target.closest('[data-a]'); if (a || e.target === bg) { bg.remove(); const ok = a && a.dataset.a === '1'; resolve(ok ? (inp ? inp.value.trim() : true) : false); } };
+    document.body.appendChild(bg); (inp || bg.querySelector('[data-a="1"]')).focus();
+  });
+}
+
+/* ---- estado ---- */
+const STATUS = {
+  'en línea': ['on', 'Encendido'], 'iniciando': ['busy', 'Encendiendo…'], 'deteniendo': ['busy', 'Apagando y guardando el mundo…'],
+  'instalando': ['busy', 'Instalando…'], 'reparando': ['busy', 'Arreglando un problema…'], 'detenido': ['', 'Apagado'],
+  'sin instalar': ['', 'Sin instalar'], 'error': ['err', 'Con problemas'],
+};
+let S = null;
+async function refresh() {
+  if (STOPPED || document.hidden) return;
+  try { S = await api('estado'); } catch (e) { if (!S) $('#gateText').textContent = e.message + ' Esta página reintenta sola.'; return; }
+  $('#gate').classList.add('hide'); $('#view').classList.remove('hide');
+  $('#who').textContent = 'Administras como ' + S.admin;
+  $('#vName').textContent = S.name; document.title = S.name + ' · Servidor de un amigo';
+  $('#vSub').textContent = `${S.type_label}${S.loader_version ? ' ' + S.loader_version : ''} · Minecraft ${S.mc_version || '?'}${S.addons_dir === 'mods' ? ` · ${S.mods_active} mods` : ''}`;
+  const [cls, txt] = STATUS[S.status] || ['', S.status];
+  let t = txt;
+  if (S.status === 'en línea') t += S.players.length ? ` · ${S.players.length} jugando: ${S.players.join(', ')}` : ' · sin jugadores';
+  if (S.progress) t += ` · ${S.progress.pct}%`;
+  $('#vDot').className = 'dot ' + cls; $('#vStatus').textContent = t;
+  const on = S.status === 'en línea' || S.status === 'iniciando';
+  const busy = ['deteniendo', 'instalando', 'reparando'].includes(S.status);
+  $('#bStart').disabled = on || busy; $('#bStop').disabled = !on; $('#bRestart').disabled = S.status !== 'en línea';
+  const hint = S.hint || S.error || '';
+  $('#vHint').classList.toggle('hide', !hint); $('#vHint').textContent = hint;
+  $('#addrRow').classList.toggle('hide', !S.address); $('#vAddr').textContent = S.address || '';
+}
+async function power(what, label, okMsg) {
+  if (label && !(await ask(label, what === 'apagar' ? 'Apagar' : 'Reiniciar', what === 'apagar'))) return;
+  await act(() => api(what, { method: 'POST' }), okMsg);
+  refresh(); pollLog();
+}
+$('#bStart').onclick = () => power('encender', null, 'Encendiendo el servidor…');
+$('#bStop').onclick = () => power('apagar', '¿Apagar el servidor? Los jugadores conectados se desconectan. El mundo se guarda.', 'Apagando…');
+$('#bRestart').onclick = () => power('reiniciar', '¿Reiniciar el servidor? Los jugadores se desconectan un momento.', 'Reiniciando…');
+
+/* ---- consola ---- */
+let LOGSEQ = 0; const HIST = []; let hIdx = -1;
+async function pollLog() {
+  if (STOPPED || document.hidden || TAB !== 'console') return;
+  try {
+    const r = await api('consola?since=' + LOGSEQ);
+    const box = $('#console'); const first = LOGSEQ === 0;
+    const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+    const frag = document.createDocumentFragment();
+    for (const l of r.lines) {
+      let k = l.k;
+      if (k === 'out' && /\b(WARN|WARNING)\b/.test(l.s)) k = 'warn';
+      if (k === 'out' && /\b(ERROR|FATAL)\b|Exception/.test(l.s)) k = 'err';
+      const d = document.createElement('div'); d.className = 'k-' + k;
+      d.innerHTML = `<span class="t">${esc(l.t)}</span>${esc(l.s)}`;
+      frag.appendChild(d);
+    }
+    box.appendChild(frag);
+    while (box.childNodes.length > 3000) box.removeChild(box.firstChild);
+    if (first || atBottom) box.scrollTop = box.scrollHeight;
+    LOGSEQ = r.last;
+  } catch { }
+}
+async function sendCmd() {
+  const v = $('#cmd').value.trim(); if (!v) return;
+  HIST.unshift(v); hIdx = -1; $('#cmd').value = '';
+  await act(() => api('comando', { method: 'POST', json: { command: v } }));
+  pollLog();
+}
+$('#bSend').onclick = sendCmd;
+$('#cmd').onkeydown = e => {
+  if (e.key === 'Enter') sendCmd();
+  else if (e.key === 'ArrowUp' && HIST.length) { hIdx = Math.min(hIdx + 1, HIST.length - 1); $('#cmd').value = HIST[hIdx]; e.preventDefault(); }
+  else if (e.key === 'ArrowDown') { hIdx = Math.max(hIdx - 1, -1); $('#cmd').value = hIdx < 0 ? '' : HIST[hIdx]; }
+};
+
+/* ---- jugadores ---- */
+async function loadPlayers() {
+  const d = await act(() => api('jugadores')); if (!d) return;
+  $('#pNote').textContent = d.running ? 'Los cambios se aplican al tiro.' : 'El servidor está apagado: los cambios valen desde el próximo encendido. Expulsar solo funciona con el servidor encendido.';
+  $('#pList').innerHTML = d.players.map(p => {
+    const b = (a, label, cls = '') => `<button class="btn sm ${cls}" data-pa="${a}" data-pn="${esc(p.name)}">${label}</button>`;
+    return `<div class="prow"><div class="who"><b>${esc(p.name)}</b>${p.op ? '<span class="badge op">ADMIN</span>' : ''}${p.whitelisted ? '<span class="badge wl">LISTA BLANCA</span>' : ''}${p.banned ? '<span class="badge ban">BANEADO</span>' : ''}
+      <div class="muted small"><span class="dot ${p.online ? 'on' : ''}"></span> ${p.online ? 'En línea' : 'Desconectado'}${p.banned && p.ban_reason ? ' · ' + esc(p.ban_reason) : ''}</div></div>
+      <div class="acts">${p.op ? b('deop', 'Quitar admin') : b('op', 'Hacer admin')}
+        ${p.whitelisted ? b('whitelist_remove', 'Sacar de lista blanca') : b('whitelist_add', 'Lista blanca')}
+        ${p.online ? b('kick', 'Expulsar') : ''}${p.banned ? b('pardon', 'Desbanear') : b('ban', 'Banear', 'danger')}</div></div>`;
+  }).join('') || '<div class="muted" style="padding:10px 4px">Todavía no ha entrado nadie.</div>';
+  $$('[data-pa]').forEach(b => b.onclick = () => playerAction(b.dataset.pa, b.dataset.pn));
+}
+async function playerAction(action, name) {
+  let reason = '';
+  if (action === 'ban') { const r = await ask(`¿Banear a ${name}?`, 'Banear', true, 'Motivo (opcional)'); if (r === false) return; reason = r; }
+  if (action === 'kick' && !(await ask(`¿Expulsar a ${name}? Puede volver a entrar.`, 'Expulsar'))) return;
+  if (action === 'op' && !(await ask(`¿Hacer admin a ${name}? Podrá usar todos los comandos del juego.`, 'Hacer admin'))) return;
+  const r = await act(() => api('jugadores', { method: 'POST', json: { action, name, reason } }), 'Listo.');
+  if (r) setTimeout(loadPlayers, 800);
+}
+$$('[data-padd]').forEach(b => b.onclick = async () => {
+  const n = $('#pAdd').value.trim();
+  if (!/^[A-Za-z0-9_]{2,16}$/.test(n)) return toast('Escribe un nombre de Minecraft válido (2 a 16 letras, números o _).', true);
+  await playerAction(b.dataset.padd, n); $('#pAdd').value = '';
+});
+
+/* ---- ajustes del juego ---- */
+const PROPS = [
+  ['motd', 'Mensaje del servidor', 'text'], ['max-players', 'Máximo de jugadores', 'number'],
+  ['gamemode', 'Modo de juego', ['survival', 'creative', 'adventure', 'spectator']],
+  ['difficulty', 'Dificultad', ['peaceful', 'easy', 'normal', 'hard']],
+  ['white-list', 'Solo lista blanca', ['true', 'false']], ['online-mode', 'Solo cuentas premium', ['true', 'false']],
+  ['pvp', 'PvP', ['true', 'false']], ['allow-flight', 'Permitir volar', ['true', 'false']],
+  ['hardcore', 'Hardcore', ['true', 'false']], ['enable-command-block', 'Bloques de comandos', ['true', 'false']],
+  ['view-distance', 'Distancia de visión', 'number'], ['simulation-distance', 'Distancia de simulación', 'number'],
+  ['spawn-protection', 'Protección del spawn', 'number'], ['level-seed', 'Semilla (mundo nuevo)', 'text'], ['level-type', 'Tipo de mundo', 'text'],
+];
+const LABELS = { survival: 'Supervivencia', creative: 'Creativo', adventure: 'Aventura', spectator: 'Espectador', peaceful: 'Pacífica', easy: 'Fácil', normal: 'Normal', hard: 'Difícil', true: 'Sí', false: 'No' };
+async function loadProps() {
+  const d = await act(() => api('propiedades')); if (!d) return;
+  $('#props').innerHTML = PROPS.map(([k, label, kind]) => {
+    const v = d[k] ?? '';
+    const field = Array.isArray(kind)
+      ? `<select data-prop="${k}">${kind.map(o => `<option value="${o}" ${o === v ? 'selected' : ''}>${esc(LABELS[o] || o)}</option>`).join('')}</select>`
+      : `<input type="${kind}" data-prop="${k}" value="${esc(v)}">`;
+    return `<label class="f"><span>${esc(label)}</span>${field}</label>`;
+  }).join('');
+}
+$('#bSaveProps').onclick = async () => {
+  const properties = {}; $$('[data-prop]').forEach(el => properties[el.dataset.prop] = el.value);
+  await act(() => api('propiedades', { method: 'PUT', json: { properties } }), 'Guardado. Se aplica al próximo encendido.');
+};
+
+/* ---- respaldos ---- */
+async function loadBackups() {
+  const d = await act(() => api('respaldos')); if (!d) return;
+  $('#backupList').innerHTML = d.map(b => `<tr><td>${esc(b.name)}</td><td class="muted">${(b.size / 1048576).toFixed(1)} MB</td></tr>`).join('')
+    || '<tr><td class="muted">Todavía no hay respaldos.</td></tr>';
+}
+$('#bBackup').onclick = async () => {
+  $('#bBackup').disabled = true;
+  await act(() => api('respaldos', { method: 'POST' }), 'Respaldo creado.');
+  $('#bBackup').disabled = false; loadBackups();
+};
+
+/* ---- pestañas y arranque ---- */
+let TAB = 'console';
+function setTab(t) {
+  TAB = t;
+  $$('.tab').forEach(el => el.classList.toggle('act', el.dataset.t === t));
+  $$('section[data-p]').forEach(el => el.classList.toggle('hide', el.dataset.p !== t));
+  if (t === 'players') loadPlayers();
+  if (t === 'settings') loadProps();
+  if (t === 'backups') loadBackups();
+  if (t === 'console') pollLog();
+}
+$$('.tab').forEach(el => el.onclick = () => setTab(el.dataset.t));
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { refresh(); pollLog(); } });
+
+(async () => {
+  if (!FID) { gate('Falta el servidor', 'Vuelve a «Mis servidores» y elige un servidor de un amigo.'); return; }
+  $('#gate').classList.remove('hide');
+  let err = '';
+  try { S = await api('estado'); } catch (e) { err = e.message; }
+  if (STOPPED) return;
+  if (S) await refresh();
+  else {
+    gate('No hay conexión', err + ' Esta página reintenta sola.');
+    STOPPED = false;
+  }
+  pollLog();
+  setInterval(refresh, 2500);
+  setInterval(pollLog, 1500);
+})();
+</script>
+</body>
+</html>

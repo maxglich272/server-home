@@ -1,0 +1,3 @@
+Botón «Borrar servidor»: borra el servidor con su mundo y sus respaldos, después de escribir su nombre para confirmar.
+Acceso remoto: en la pestaña «Acceso remoto» creas un código para un amigo; él lo pega en «Servidores de amigos» de su Servidor Home y puede encender, apagar, reiniciar, usar la consola, manejar jugadores, cambiar ajustes del juego y respaldar ese servidor. No hay que abrir puertos: los mensajes viajan cifrados. No puede tocar mods, versiones, otros servidores ni borrar nada, y puedes quitarle el acceso cuando quieras.
+Las actualizaciones ahora se descargan desde el repositorio nuevo de GitHub (maxglich272/server-home).
