@@ -6,7 +6,7 @@ dirección fija de playit.gg. El servidor corre en este mismo PC y no hay que ab
 ## Instalar (Windows)
 
 Descarga el instalador desde
-[github.com/contrerasmaximiliano2407-wq/server-home](https://github.com/contrerasmaximiliano2407-wq/server-home/releases/latest/download/Instalar-Servidor-Home.exe)
+[github.com/maxglich272/server-home](https://github.com/maxglich272/server-home/releases/latest/download/Instalar-Servidor-Home.exe)
 y ábrelo → *Siguiente* → *Terminar*. Se instala solo para tu usuario (no pide permisos de administrador) y deja el
 acceso directo **Servidor Home** en el Escritorio y en el menú Inicio.
 

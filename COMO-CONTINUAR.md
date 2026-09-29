@@ -189,7 +189,9 @@ cuando entraba un jugador; hay que borrarlas):
    `python3 build/publicar.py --clave RUTA/clave-privada-NO-SUBIR.json --novedades novedades.txt`
    (en `novedades.txt` va una novedad por línea, en español simple).
    Queda todo en `build/publicar/<versión>/`, con un `LEEME.txt` que explica los pasos.
-5. En GitHub: https://github.com/contrerasmaximiliano2407-wq/server-home/releases/new
+5. En GitHub: https://github.com/maxglich272/server-home/releases/new
+   (el repositorio antes se llamaba `contrerasmaximiliano2407-wq/server-home`; GitHub redirige el nombre viejo,
+   y las apps hasta la 2.5.5 todavía lo usan: no crees otro repositorio `server-home` en esa cuenta).
    - Etiqueta `v<versión>` y título `Servidor Home <versión>`.
    - Adjunta `actualizacion.json`, `servidor-home-<versión>.zip` y `Instalar-Servidor-Home.exe`.
    - Publica la release como «latest».

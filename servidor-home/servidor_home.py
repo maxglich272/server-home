@@ -5645,7 +5645,7 @@ class Playit:
 # prueba que el código nuevo cargue y lo instala cuando no molesta: al abrir la app o cuando no hay
 # servidores encendidos ni ventana abierta. Si la versión nueva no arranca, vuelve sola a la anterior.
 
-UPDATE_REPO = "contrerasmaximiliano2407-wq/server-home"     # usuario/repositorio en GitHub donde se publican las versiones
+UPDATE_REPO = "maxglich272/server-home"     # usuario/repositorio en GitHub donde se publican las versiones
 UPDATE_MANIFEST_URL = (f"https://github.com/{UPDATE_REPO}/releases/latest/download/actualizacion.json"
                        if UPDATE_REPO else "")
 # Clave pública RSA de 3072 bits (firma PKCS#1 v1.5 con SHA-256) del autor de Servidor Home.
