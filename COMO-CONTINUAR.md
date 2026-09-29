@@ -13,6 +13,11 @@ Si le pides a Claude un cambio en otra conversación, dile que lea este archivo 
     (`makensis`, paquete `nsis` de Linux).
   - `app/python/` trae Python 3.12 para Windows (python-build-standalone), que va dentro del instalador.
   - `publicar.py` prepara una versión para GitHub y la firma con la clave privada.
+  - `construir_linux.sh` arma `publicar/Servidor-Home-linux-x86_64.tar.gz` (o `aarch64`): el programa con su propio
+    Python 3.12 (python-build-standalone). Quien lo baja lo instala sin root con
+    `tar xf Servidor-Home-linux-x86_64.tar.gz && bash servidor-home/instalar.sh`: queda en
+    `~/.local/share/servidor-home/app`, con acceso en el menú, y se actualiza solo con el mismo paquete .zip que
+    Windows. Súbelo a la misma Release que el instalador.
   - `construir_prueba.sh`, `prueba_constantes.py` y `claves-prueba/` sirven solo para las pruebas. Arman un
     instalador que se actualiza desde un GitHub simulado.
 - `gpumod/`: el mod «GPU Dedicada» para el juego (no para el servidor). Se compila con `gpumod/construir.sh`, que
@@ -31,6 +36,15 @@ Si le pides a Claude un cambio en otra conversación, dile que lea este archivo 
     jugadores, reiniciar y el diagnóstico con el log real; usa el puerto 8766 y el mock encendido).
   - En Windows simulado con Wine: `run_win*.sh`, `win_update_flow.py` y `win_app_flow.py`. Necesitan un prefijo
     de Wine con Python para Windows, un Edge falso y Xvfb, que hay que volver a preparar en cada entorno nuevo.
+
+## Topes de memoria y suspensión
+
+- Cada servidor corre con un tope de memoria (`memory_cap_mb`: el doble de su RAM más 2 GB, sin pasar de la RAM del PC
+  menos 1 GB, pero nunca menos que su RAM y la mitad) para que uno desbocado no congele el PC. En Windows va en su
+  propio Job (`attach_to_job(proc, tope)`); en Linux se lanza con `systemd-run --user --scope -p MemoryMax=`
+  (`limit_command`) si hay systemd de usuario, y si no corre igual que antes. `SERVIDOR_HOME_SIN_TOPES=1` lo desactiva.
+- `KeepAwake` evita que el PC se suspenda mientras haya servidores: en Windows con `SetThreadExecutionState` y en Linux
+  con `systemd-inhibit`, atado al PID de la app para que el bloqueo no quede huérfano.
 
 ## Para diagnosticar un servidor que falla
 
